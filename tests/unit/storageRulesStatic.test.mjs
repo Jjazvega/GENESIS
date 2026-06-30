@@ -11,6 +11,11 @@ describe('Cloud Storage rules static invariants', () => {
     assert.match(source, /function hasCompanyToken\(companyId\) \{/);
     assert.match(source, /request\.auth\.token\.companyId == companyId/);
     assert.match(source, /request\.auth\.token\.membershipStatus == 'active'/);
+    assert.match(source, /function hasFreshCompanyToken\(companyId\) \{/);
+    assert.match(source, /request\.auth\.token\.companyVersion == version\(companyDoc\(companyId\), 'companyVersion'\)/);
+    assert.match(source, /request\.auth\.token\.membershipVersion == version\(membershipDoc\(companyId\), 'membershipVersion'\)/);
+    assert.match(source, /request\.auth\.token\.claimsVersion >= version\(companyDoc\(companyId\), 'claimsVersion'\)/);
+    assert.match(source, /request\.auth\.token\.claimsVersion >= version\(membershipDoc\(companyId\), 'claimsVersion'\)/);
     assert.match(source, /allow read: if hasCompanyToken\(companyId\)/);
   });
 

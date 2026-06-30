@@ -13,12 +13,13 @@ import {
 
 const companyId = 'company-storage';
 const otherCompanyId = 'company-storage-other';
-const owner = { uid: 'storage-owner-uid', claims: { email: 'storage-owner@gemailla.test', email_verified: true, companyId, companyRole: 'owner', membershipStatus: 'active' } };
-const director = { uid: 'storage-director-uid', claims: { email: 'storage-director@gemailla.test', email_verified: true, companyId, companyRole: 'director', membershipStatus: 'active' } };
+const claimVersions = { membershipVersion: 1, companyVersion: 1, claimsVersion: 1 };
+const owner = { uid: 'storage-owner-uid', claims: { email: 'storage-owner@gemailla.test', email_verified: true, companyId, ...claimVersions, companyRole: 'owner', membershipStatus: 'active' } };
+const director = { uid: 'storage-director-uid', claims: { email: 'storage-director@gemailla.test', email_verified: true, companyId, ...claimVersions, companyRole: 'director', membershipStatus: 'active' } };
 const outsider = { uid: 'storage-outsider-uid', claims: { email: 'storage-outsider@gemailla.test', email_verified: true, companyId: 'company-outsider', companyRole: 'viewer', membershipStatus: 'active' } };
-const viewer = { uid: 'storage-viewer-uid', claims: { email: 'storage-viewer@gemailla.test', email_verified: true, companyId, companyRole: 'viewer', membershipStatus: 'active' } };
-const inactiveOwner = { uid: 'storage-inactive-owner-uid', claims: { email: 'storage-inactive-owner@gemailla.test', email_verified: true, companyId, companyRole: 'owner', membershipStatus: 'inactive' } };
-const otherOwner = { uid: 'other-storage-owner-uid', claims: { email: 'other-storage-owner@gemailla.test', email_verified: true, companyId: otherCompanyId, companyRole: 'owner', membershipStatus: 'active' } };
+const viewer = { uid: 'storage-viewer-uid', claims: { email: 'storage-viewer@gemailla.test', email_verified: true, companyId, ...claimVersions, companyRole: 'viewer', membershipStatus: 'active' } };
+const inactiveOwner = { uid: 'storage-inactive-owner-uid', claims: { email: 'storage-inactive-owner@gemailla.test', email_verified: true, companyId, ...claimVersions, companyRole: 'owner', membershipStatus: 'inactive' } };
+const otherOwner = { uid: 'other-storage-owner-uid', claims: { email: 'other-storage-owner@gemailla.test', email_verified: true, companyId: otherCompanyId, ...claimVersions, companyRole: 'owner', membershipStatus: 'active' } };
 
 const documentId = 'doc-1';
 const missingDocumentId = 'doc-missing';
@@ -33,11 +34,14 @@ async function seedStorageAcl() {
     companyId,
     ownerUid: owner.uid,
     memberships: [
+      { userUid: owner.uid, userEmail: owner.claims.email, role: 'owner', status: 'active' },
       { userUid: director.uid, userEmail: director.claims.email, role: 'director', status: 'active' },
       { userUid: viewer.uid, userEmail: viewer.claims.email, role: 'viewer', status: 'active' },
     ],
   });
-  await seedCompany({ companyId: otherCompanyId, ownerUid: 'other-storage-owner-uid' });
+  await seedCompany({ companyId: otherCompanyId, ownerUid: 'other-storage-owner-uid', memberships: [
+    { userUid: otherOwner.uid, userEmail: otherOwner.claims.email, role: 'owner', status: 'active' },
+  ] });
 
   await assertAllowed(firestoreSet(`documents/${documentId}`, {
     companyId,
@@ -185,6 +189,26 @@ describe('Cloud Storage security rules', () => {
     await assertAllowed(storageRead(validPdfPath, viewer), 'active viewer read');
     await assertDenied(storageRead(validPdfPath, inactiveOwner), 'inactive owner read');
     await assertDenied(storageRead(validPdfPath, outsider), 'outsider read');
+  });
+
+  it('denies reads and uploads when tenant claim versions are stale', async () => {
+    const staleMembershipDirector = {
+      uid: director.uid,
+      claims: { ...director.claims, membershipVersion: 0 },
+    };
+    const staleCompanyDirector = {
+      uid: director.uid,
+      claims: { ...director.claims, companyVersion: 0 },
+    };
+    const staleClaimsDirector = {
+      uid: director.uid,
+      claims: { ...director.claims, claimsVersion: 0 },
+    };
+
+    await assertAllowed(storageUpload(validPdfPath, owner, { customMetadata: { companyId, documentId } }), 'owner fixture upload for stale claim checks');
+    await assertDenied(storageRead(validPdfPath, staleMembershipDirector), 'stale membershipVersion read');
+    await assertDenied(storageUpload(validXmlPath, staleCompanyDirector, { metadata: { companyId, documentId } }), 'stale companyVersion upload');
+    await assertDenied(storageRead(validPdfPath, staleClaimsDirector), 'stale claimsVersion read');
   });
 
   it('blocks client updates and physical deletes even for permitted company users', async () => {

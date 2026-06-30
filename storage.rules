@@ -9,7 +9,29 @@ service firebase.storage {
     function hasCompanyToken(companyId) {
       return signedIn()
         && request.auth.token.companyId == companyId
-        && request.auth.token.membershipStatus == 'active';
+        && request.auth.token.membershipStatus == 'active'
+        && hasFreshCompanyToken(companyId);
+    }
+
+    function companyDoc(companyId) {
+      return firestore.get(/databases/(default)/documents/companies/$(companyId)).data;
+    }
+
+    function membershipDoc(companyId) {
+      return firestore.get(/databases/(default)/documents/companyMembers/$(companyId + '_' + request.auth.uid)).data;
+    }
+
+    function version(data, field) {
+      return data.get(field, 1);
+    }
+
+    function hasFreshCompanyToken(companyId) {
+      return firestore.exists(/databases/(default)/documents/companies/$(companyId))
+        && firestore.exists(/databases/(default)/documents/companyMembers/$(companyId + '_' + request.auth.uid))
+        && request.auth.token.companyVersion == version(companyDoc(companyId), 'companyVersion')
+        && request.auth.token.membershipVersion == version(membershipDoc(companyId), 'membershipVersion')
+        && request.auth.token.claimsVersion >= version(companyDoc(companyId), 'claimsVersion')
+        && request.auth.token.claimsVersion >= version(membershipDoc(companyId), 'claimsVersion');
     }
 
     function canWriteCompanyDocuments(companyId) {
