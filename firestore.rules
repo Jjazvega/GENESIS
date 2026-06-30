@@ -1,0 +1,385 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function currentUid() {
+      return request.auth.uid;
+    }
+
+    function currentCompanyId() {
+      return request.auth.token.get('companyId', '');
+    }
+
+    function sameCompany(companyId) {
+      return signedIn()
+        && companyId is string
+        && companyId.size() > 0
+        && currentCompanyId() == companyId;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && (request.auth.token.get('role', null) in ['owner', 'director', 'admin']
+          || request.auth.token.get('companyRole', null) in ['owner', 'director', 'admin']);
+    }
+
+    function hasField(data, field) {
+      return data.keys().hasAny([field]);
+    }
+
+    function hasCompanyId(data) {
+      return hasField(data, 'companyId')
+        && data.companyId is string
+        && data.companyId.size() > 0;
+    }
+
+    function hasOwnerUid(data) {
+      return hasField(data, 'ownerUid')
+        && data.ownerUid is string
+        && data.ownerUid == currentUid();
+    }
+
+    function ownerUidIsSelfOrMissing(data) {
+      return !hasField(data, 'ownerUid') || data.ownerUid == currentUid();
+    }
+
+    function membershipId(companyId) {
+      return companyId + '_' + currentUid();
+    }
+
+    function companyExists(companyId) {
+      return exists(/databases/$(database)/documents/companies/$(companyId));
+    }
+
+    function isCompanyOwner(companyId) {
+      return signedIn()
+        && companyExists(companyId)
+        && get(/databases/$(database)/documents/companies/$(companyId)).data.ownerUid == currentUid();
+    }
+
+    function hasActiveMembership(companyId) {
+      let memberId = membershipId(companyId);
+      return signedIn()
+        && exists(/databases/$(database)/documents/companyMembers/$(memberId))
+        && get(/databases/$(database)/documents/companyMembers/$(memberId)).data.get('status', null) == 'active';
+    }
+
+    function memberRole(companyId) {
+      let memberId = membershipId(companyId);
+      return get(/databases/$(database)/documents/companyMembers/$(memberId)).data.get('role', null);
+    }
+
+    function hasAnyCompanyRole(companyId, roles) {
+      return hasActiveMembership(companyId) && memberRole(companyId) in roles;
+    }
+
+    function canReadCompany(companyId) {
+      return sameCompany(companyId)
+        && (isCompanyOwner(companyId) || hasActiveMembership(companyId));
+    }
+
+    function canWriteCompany(companyId) {
+      return sameCompany(companyId)
+        && (isCompanyOwner(companyId)
+          || hasAnyCompanyRole(companyId, ['owner', 'director', 'admin', 'editor']));
+    }
+
+    function canManageCompany(companyId) {
+      return sameCompany(companyId)
+        && (isCompanyOwner(companyId)
+          || hasAnyCompanyRole(companyId, ['owner', 'director', 'admin']));
+    }
+
+    function canCreateInitialOwnerMembership(memberId) {
+      let companyId = request.resource.data.companyId;
+      return signedIn()
+        && hasCompanyId(request.resource.data)
+        && memberId == membershipId(companyId)
+        && request.resource.data.get('userUid', null) == currentUid()
+        && request.resource.data.get('status', null) == 'active'
+        && request.resource.data.get('role', null) in ['owner', 'director']
+        && existsAfter(/databases/$(database)/documents/companies/$(companyId))
+        && getAfter(/databases/$(database)/documents/companies/$(companyId)).data.ownerUid == currentUid();
+    }
+
+
+    function auditCreateFieldsAreSafe(data) {
+      return (!hasField(data, 'createdAt') || data.createdAt is string)
+        && (!hasField(data, 'updatedAt') || data.updatedAt is string)
+        && (!hasField(data, 'createdBy') || data.createdBy == currentUid())
+        && (!hasField(data, 'updatedBy') || data.updatedBy == currentUid());
+    }
+
+    function auditUpdateFieldsAreSafe() {
+      return (!hasField(resource.data, 'createdAt') || request.resource.data.createdAt == resource.data.createdAt)
+        && (!hasField(resource.data, 'createdBy') || request.resource.data.createdBy == resource.data.createdBy)
+        && (!hasField(request.resource.data, 'updatedAt') || request.resource.data.updatedAt is string)
+        && (!hasField(request.resource.data, 'updatedBy') || request.resource.data.updatedBy == currentUid());
+    }
+
+    function hasNoRoleFields(data) {
+      return !hasField(data, 'role') && !hasField(data, 'companyRole');
+    }
+
+    function roleFieldsUnchanged() {
+      return (!hasField(resource.data, 'role') || request.resource.data.role == resource.data.role)
+        && (hasField(resource.data, 'role') || !hasField(request.resource.data, 'role'))
+        && (!hasField(resource.data, 'companyRole') || request.resource.data.companyRole == resource.data.companyRole)
+        && (hasField(resource.data, 'companyRole') || !hasField(request.resource.data, 'companyRole'));
+    }
+
+    function validCompanyCreate() {
+      return signedIn()
+        && auditCreateFieldsAreSafe(request.resource.data)
+        && request.resource.data.ownerUid == currentUid()
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 180;
+    }
+
+    function canCreateCompanyRecord() {
+      return signedIn()
+        && auditCreateFieldsAreSafe(request.resource.data)
+        && hasCompanyId(request.resource.data)
+        && canWriteCompany(request.resource.data.companyId)
+        && ownerUidIsSelfOrMissing(request.resource.data);
+    }
+
+    function canReadCompanyRecord() {
+      return signedIn()
+        && hasCompanyId(resource.data)
+        && canReadCompany(resource.data.companyId);
+    }
+
+    function companyIdUnchanged() {
+      return hasCompanyId(resource.data)
+        && hasCompanyId(request.resource.data)
+        && request.resource.data.companyId == resource.data.companyId;
+    }
+
+    function ownerUidUnchangedOrSelf() {
+      return !hasField(resource.data, 'ownerUid')
+        || !hasField(request.resource.data, 'ownerUid')
+        || request.resource.data.ownerUid == resource.data.ownerUid
+        || request.resource.data.ownerUid == currentUid();
+    }
+
+    function canUpdateCompanyRecord() {
+      return signedIn()
+        && auditUpdateFieldsAreSafe()
+        && companyIdUnchanged()
+        && canWriteCompany(resource.data.companyId)
+        && ownerUidUnchangedOrSelf();
+    }
+
+    function canCreateOwnedOrCompanyRecord() {
+      return signedIn()
+        && auditCreateFieldsAreSafe(request.resource.data)
+        && ownerUidIsSelfOrMissing(request.resource.data)
+        && (
+          (hasCompanyId(request.resource.data) && canWriteCompany(request.resource.data.companyId))
+          || hasOwnerUid(request.resource.data)
+        );
+    }
+
+    function canReadOwnedOrCompanyRecord() {
+      return signedIn()
+        && (
+          (hasCompanyId(resource.data) && canReadCompany(resource.data.companyId))
+          || hasOwnerUid(resource.data)
+        );
+    }
+
+    function canUpdateOwnedOrCompanyRecord() {
+      return signedIn()
+        && auditUpdateFieldsAreSafe()
+        && ownerUidUnchangedOrSelf()
+        && (
+          (hasCompanyId(resource.data) && companyIdUnchanged() && canWriteCompany(resource.data.companyId))
+          || hasOwnerUid(resource.data)
+        );
+    }
+
+
+
+    function hasNoPublicDocumentUrls(data) {
+      return !hasField(data, 'fileUrl')
+        && !hasField(data, 'file_url')
+        && !hasField(data, 'downloadUrl')
+        && !hasField(data, 'downloadURL')
+        && !hasField(data, 'publicUrl');
+    }
+
+    function validDocumentEnvelope(data) {
+      return data.fileSize is number
+        && data.fileSize <= 15 * 1024 * 1024
+        && data.contentType is string
+        && data.title is string
+        && data.title.size() > 0
+        && data.get('status', null) in ['active', 'uploading', 'pending', 'uploaded', 'processing', 'analyzed', 'error', 'archived', 'ai_disabled']
+        && hasNoPublicDocumentUrls(data);
+    }
+
+    function validDocumentCreate() {
+      return canCreateCompanyRecord()
+        && validDocumentEnvelope(request.resource.data)
+        && (
+          request.resource.data.get('status', null) == 'uploading'
+          || request.resource.data.storagePath is string
+        );
+    }
+
+    function validDocumentUpdate() {
+      return canUpdateCompanyRecord()
+        && validDocumentEnvelope(request.resource.data)
+        && (
+          request.resource.data.get('status', null) in ['uploading', 'error']
+          || request.resource.data.storagePath is string
+        );
+    }
+
+    function canCreateAiBudget() {
+      return isAdmin()
+        && hasCompanyId(request.resource.data)
+        && sameCompany(request.resource.data.companyId);
+    }
+
+    function canUpdateAiBudget() {
+      return isAdmin()
+        && hasCompanyId(resource.data)
+        && hasCompanyId(request.resource.data)
+        && request.resource.data.companyId == resource.data.companyId
+        && sameCompany(resource.data.companyId);
+    }
+
+    function canReadAiFinancialData(data) {
+      return signedIn()
+        && hasCompanyId(data)
+        && canManageCompany(data.companyId);
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn() && userId == currentUid();
+      allow create: if signedIn()
+        && userId == currentUid()
+        && auditCreateFieldsAreSafe(request.resource.data)
+        && hasNoRoleFields(request.resource.data);
+      allow update: if signedIn()
+        && userId == currentUid()
+        && auditUpdateFieldsAreSafe()
+        && roleFieldsUnchanged();
+      allow delete: if false;
+    }
+
+    match /companies/{companyId} {
+      allow create: if validCompanyCreate();
+      allow read: if canReadCompany(companyId);
+      allow update: if canManageCompany(companyId)
+        && auditUpdateFieldsAreSafe()
+        && request.resource.data.ownerUid == resource.data.ownerUid;
+      allow delete: if false;
+    }
+
+    match /companyMembers/{memberId} {
+      allow create: if signedIn()
+        && auditCreateFieldsAreSafe(request.resource.data)
+        && hasCompanyId(request.resource.data)
+        && (canManageCompany(request.resource.data.companyId) || canCreateInitialOwnerMembership(memberId))
+        && request.resource.data.get('status', null) in ['active', 'pending', 'archived']
+        && request.resource.data.get('role', null) in ['owner', 'director', 'admin', 'editor', 'viewer', 'invitado'];
+
+      allow read: if signedIn()
+        && hasCompanyId(resource.data)
+        && (
+          (sameCompany(resource.data.companyId) && hasField(resource.data, 'userUid') && resource.data.userUid == currentUid())
+          || canManageCompany(resource.data.companyId)
+        );
+
+      allow update: if signedIn()
+        && auditUpdateFieldsAreSafe()
+        && hasCompanyId(resource.data)
+        && hasCompanyId(request.resource.data)
+        && request.resource.data.companyId == resource.data.companyId
+        && canManageCompany(resource.data.companyId)
+        && request.resource.data.get('role', null) in ['owner', 'director', 'admin', 'editor', 'viewer', 'invitado']
+        && request.resource.data.get('status', null) in ['active', 'pending', 'archived'];
+
+      allow delete: if false;
+    }
+
+    match /auditLogs/{logId} {
+      allow read: if isAdmin() && hasCompanyId(resource.data) && sameCompany(resource.data.companyId);
+      allow write: if false;
+    }
+
+    match /aiUsage/{id} {
+      allow read: if canReadAiFinancialData(resource.data);
+      allow create, update, delete: if false;
+    }
+
+    match /aiCostLogs/{id} {
+      allow read: if canReadAiFinancialData(resource.data);
+      allow create, update, delete: if false;
+    }
+
+    match /aiAuditLogs/{id} {
+      allow read: if canReadAiFinancialData(resource.data);
+      allow create, update, delete: if false;
+    }
+
+    match /aiBudgets/{id} {
+      allow read: if canReadAiFinancialData(resource.data);
+      allow create: if canCreateAiBudget();
+      allow update: if canUpdateAiBudget();
+      allow delete: if false;
+    }
+
+    match /observabilityEvents/{eventId} {
+      allow create: if canCreateOwnedOrCompanyRecord();
+      allow read: if canReadOwnedOrCompanyRecord();
+      allow update, delete: if false;
+    }
+
+    match /importLogs/{importLogId} {
+      allow create: if canCreateCompanyRecord();
+      allow read: if canReadCompanyRecord();
+      allow update, delete: if false;
+    }
+
+    match /documents/{documentId} {
+      allow create: if validDocumentCreate();
+      allow read: if canReadCompanyRecord();
+      allow update: if validDocumentUpdate();
+      allow delete: if false;
+    }
+
+    match /transactions/{id} {
+      allow create: if canCreateCompanyRecord();
+      allow read: if canReadCompanyRecord();
+      allow update: if canUpdateCompanyRecord();
+      allow delete: if false;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+    match /aiConversations/{id} {
+      allow create: if canCreateOwnedOrCompanyRecord();
+      allow read: if canReadOwnedOrCompanyRecord();
+      allow update: if canUpdateOwnedOrCompanyRecord();
+      allow delete: if false;
+    }
+  }
+}

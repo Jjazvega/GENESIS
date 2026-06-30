@@ -1,0 +1,22 @@
+{
+  "name": "gemailla-ai-functions",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Backend seguro de IA para GEMAILLA AI desplegado en Firebase Functions.",
+  "main": "index.js",
+  "engines": {
+    "node": "22",
+    "npm": ">=11 <12"
+  },
+  "scripts": {
+    "serve": "firebase emulators:start --only functions",
+    "deploy": "firebase deploy --only functions",
+    "lint": "node --check index.js && node --check handlers/functionsRouter.js",
+    "test": "npm run lint"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^6.6.0"
+  },
+  "packageManager": "npm@11.4.2"
+}

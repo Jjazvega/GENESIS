@@ -1,0 +1,89 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function hasCompanyToken(companyId) {
+      return signedIn()
+        && request.auth.token.companyId == companyId
+        && request.auth.token.membershipStatus == 'active';
+    }
+
+    function canWriteCompanyDocuments(companyId) {
+      return hasCompanyToken(companyId)
+        && request.auth.token.companyRole in ['owner', 'director', 'admin', 'editor'];
+    }
+
+    function hasExistingObjectMetadata(companyId, documentId) {
+      return resource.metadata != null
+        && resource.metadata.keys().hasAll(['companyId', 'documentId'])
+        && resource.metadata.companyId == companyId
+        && resource.metadata.documentId == documentId;
+    }
+
+    function documentExists(companyId, documentId) {
+      return firestore.exists(
+        /databases/(default)/documents/documents/$(documentId)
+      )
+      && firestore.get(
+        /databases/(default)/documents/documents/$(documentId)
+      ).data.companyId == companyId;
+    }
+
+    function hasRequiredUploadMetadata() {
+      return request.resource.metadata != null
+        && request.resource.metadata.keys().hasAll(['companyId', 'documentId']);
+    }
+
+    function isValidMetadata(companyId, documentId) {
+      return hasRequiredUploadMetadata()
+        && (
+          request.resource.metadata.companyId == companyId
+          || request.resource.metadata.get('companyId', null) == companyId
+        )
+        && (
+          request.resource.metadata.documentId == documentId
+          || request.resource.metadata.get('documentId', null) == documentId
+        );
+    }
+
+    function hasAllowedDocumentContentType() {
+      return request.resource.contentType == 'application/pdf'
+        || request.resource.contentType == 'text/xml'
+        || request.resource.contentType == 'application/xml';
+    }
+
+    function hasAllowedFileExtension(fileName) {
+      return fileName.matches('(?i)^.+\\.(pdf|xml)$');
+    }
+
+    function contentTypeMatchesExtension(fileName) {
+      return (fileName.matches('(?i)^.+\\.pdf$') && request.resource.contentType == 'application/pdf')
+        || (fileName.matches('(?i)^.+\\.xml$') && (request.resource.contentType == 'text/xml' || request.resource.contentType == 'application/xml'));
+    }
+
+    match /companies/{companyId}/documents/{documentId}/{fileName} {
+
+      allow read: if hasCompanyToken(companyId)
+                  && hasExistingObjectMetadata(companyId, documentId);
+
+      allow create: if canWriteCompanyDocuments(companyId)
+                    && documentExists(companyId, documentId)
+                    && isValidMetadata(companyId, documentId)
+                    && request.resource.size > 0
+                    && request.resource.size < 15 * 1024 * 1024
+                    && hasAllowedDocumentContentType()
+                    && hasAllowedFileExtension(fileName)
+                    && contentTypeMatchesExtension(fileName);
+
+      allow update, delete: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

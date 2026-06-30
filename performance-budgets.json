@@ -1,0 +1,26 @@
+{
+  "description": "Presupuestos máximos gzip por ruta crítica. Ejecutar npm run budget:bundle después de npm run build.",
+  "sharedVendorMaxKb": 650,
+  "routes": {
+    "/dashboard": {
+      "module": "src/pages/Dashboard.jsx",
+      "routeMaxKb": 95,
+      "allowedVendors": ["vendor-core", "vendor-firebase"]
+    },
+    "/documents": {
+      "module": "src/modules/documents/pages/DocumentsPage.jsx",
+      "routeMaxKb": 120,
+      "allowedVendors": ["vendor-core", "vendor-firebase"]
+    },
+    "/finance": {
+      "module": "src/pages/FinancialHub.jsx",
+      "routeMaxKb": 180,
+      "allowedVendors": ["vendor-core", "vendor-firebase", "vendor-charts"]
+    },
+    "/ai": {
+      "module": "src/pages/AIAssistant.jsx",
+      "routeMaxKb": 140,
+      "allowedVendors": ["vendor-core", "vendor-firebase"]
+    }
+  }
+}

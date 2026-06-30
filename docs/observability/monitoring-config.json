@@ -1,0 +1,21 @@
+{
+  "alertPolicies": [
+    { "id": "cloud-functions-errors" },
+    { "id": "ai-failures" },
+    { "id": "ai-daily-token-cost-by-company" },
+    { "id": "storage-errors" },
+    { "id": "security-rules-denials-anomaly" }
+  ],
+  "dashboard": {
+    "widgets": [
+      { "id": "aiUsage" },
+      { "id": "aiCostLogs" },
+      { "id": "aiAuditLogs" }
+    ]
+  },
+  "reviewedDefaults": {
+    "AI_DAILY_TOKEN_LIMIT": { "value": 50000 },
+    "AI_DAILY_BUDGET_USD": { "value": 5 },
+    "AI_RATE_LIMIT_MAX_REQUESTS": { "value": 30, "windowMs": 60000 }
+  }
+}

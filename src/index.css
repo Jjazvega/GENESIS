@@ -1,0 +1,179 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=Source+Serif+4:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-sans: 'Cormorant Garamond', serif;
+    --font-display: 'Source Serif 4', serif;
+
+    --background: 0 3% 6%;
+    --foreground: 45 20% 94%;
+    --card: 0 0% 5%;
+    --card-foreground: 45 20% 94%;
+    --popover: 0 0% 6%;
+    --popover-foreground: 45 20% 94%;
+    --primary: 230 0% 53%;
+    --primary-foreground: 0 0% 3%;
+    --secondary: 0 0% 9%;
+    --secondary-foreground: 45 18% 82%;
+    --muted: 0 0% 8%;
+    --muted-foreground: 45 10% 72%;
+    --accent: 43 74% 62%;
+    --accent-foreground: 0 0% 3%;
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 43 35% 24%;
+    --input: 0 0% 10%;
+    --ring: 43 74% 62%;
+    --chart-1: 43 74% 62%;
+    --chart-2: 38 38% 38%;
+    --chart-3: 160 55% 42%;
+    --chart-4: 200 65% 48%;
+    --chart-5: 280 55% 52%;
+    --radius: 0.6rem;
+    --sidebar-background: 0 0% 3%;
+    --sidebar-foreground: 45 20% 90%;
+    --sidebar-primary: 43 74% 62%;
+    --sidebar-primary-foreground: 0 0% 3%;
+    --sidebar-accent: 0 0% 8%;
+    --sidebar-accent-foreground: 45 20% 90%;
+    --sidebar-border: 43 22% 18%;
+    --sidebar-ring: 43 74% 62%;
+  }
+
+  .dark {
+    --background: 0 0% 2%;
+    --foreground: 45 20% 94%;
+    --card: 0 0% 5%;
+    --card-foreground: 45 20% 94%;
+    --popover: 0 0% 6%;
+    --popover-foreground: 45 20% 94%;
+    --primary: 43 74% 62%;
+    --primary-foreground: 0 0% 3%;
+    --secondary: 0 0% 9%;
+    --secondary-foreground: 45 18% 82%;
+    --muted: 0 0% 8%;
+    --muted-foreground: 45 10% 72%;
+    --accent: 43 74% 62%;
+    --accent-foreground: 0 0% 3%;
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 43 35% 24%;
+    --input: 0 0% 10%;
+    --ring: 43 74% 62%;
+    --chart-1: 43 74% 62%;
+    --chart-2: 38 38% 38%;
+    --chart-3: 160 55% 42%;
+    --chart-4: 200 65% 48%;
+    --chart-5: 280 55% 52%;
+    --sidebar-background: 0 0% 3%;
+    --sidebar-foreground: 45 20% 90%;
+    --sidebar-primary: 43 74% 62%;
+    --sidebar-primary-foreground: 0 0% 3%;
+    --sidebar-accent: 0 0% 8%;
+    --sidebar-accent-foreground: 45 20% 90%;
+    --sidebar-border: 43 22% 18%;
+    --sidebar-ring: 43 74% 62%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    font-size: 17px;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    letter-spacing: 0.01em;
+    font-weight: 500;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+html, body {
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.safe-left {
+  padding-left: env(safe-area-inset-left);
+}
+.safe-right {
+  padding-right: env(safe-area-inset-right);
+}
+
+button, a, [role="button"] {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+svg {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: hsl(0 0% 6%);
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(0 0% 20%);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(43 74% 62%);
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.gold-shimmer {
+  background: linear-gradient(90deg, #f5d97d 0%, #d8b35d 30%, #ffe08c 60%, #d8b35d 100%);
+  background-size: 200% 100%;
+  animation: shimmer 4s ease-in-out infinite;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gold-card {
+  background: #0a0a0a;
+  border: 1px solid rgba(216,179,93,0.35);
+  box-shadow: 0 2px 20px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,224,140,0.08);
+}
+
+.gold-title {
+  background: linear-gradient(135deg, #ffe08c 0%, #d8b35d 50%, #fff1b8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+@keyframes pulse-gold {
+  0%, 100% { box-shadow: 0 0 8px rgba(216,179,93,0.35); }
+  50% { box-shadow: 0 0 18px rgba(216,179,93,0.6); }
+}
+.gold-glow {
+  animation: pulse-gold 3s ease-in-out infinite;
+}
