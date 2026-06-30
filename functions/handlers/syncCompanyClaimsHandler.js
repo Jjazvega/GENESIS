@@ -33,6 +33,11 @@ function getRoleForClaims(role) {
   return AI_ALLOWED_ROLES.has(normalized) || COMPANY_ADMIN_ROLES.has(normalized) ? normalized : 'viewer';
 }
 
+function toClaimsVersion(value) {
+  const version = Number(value);
+  return Number.isSafeInteger(version) && version > 0 ? version : 1;
+}
+
 async function syncCompanyClaimsHandler(req, res) {
   applyCors(req, res);
   if (req.method === 'OPTIONS') {
@@ -51,12 +56,28 @@ async function syncCompanyClaimsHandler(req, res) {
     const companyId = requireCompanyId(req.body || {});
     const access = await validateCompanyAccess({ user, companyId });
     const companyRole = getRoleForClaims(access.role);
-    await admin.auth().setCustomUserClaims(user.uid, { companyId, companyRole, role: companyRole });
-    return res.status(200).json({ success: true, companyId, companyRole });
+    const membershipStatus = access.membership?.status || 'active';
+    const membershipVersion = toClaimsVersion(access.membership?.membershipVersion);
+    const companyVersion = toClaimsVersion(access.company?.companyVersion);
+    const claimsVersion = Math.max(
+      toClaimsVersion(access.membership?.claimsVersion),
+      toClaimsVersion(access.company?.claimsVersion),
+    );
+    const claims = {
+      companyId,
+      companyRole,
+      role: companyRole,
+      membershipStatus,
+      membershipVersion,
+      companyVersion,
+      claimsVersion,
+    };
+    await admin.auth().setCustomUserClaims(user.uid, claims);
+    return res.status(200).json({ success: true, ...claims });
   } catch (error) {
     const status = Number(error?.status) || 500;
     return res.status(status).json({ error: error?.message || 'No se pudieron sincronizar los claims.' });
   }
 }
 
-module.exports = { getRoleForClaims, syncCompanyClaimsHandler };
+module.exports = { getRoleForClaims, syncCompanyClaimsHandler, toClaimsVersion };

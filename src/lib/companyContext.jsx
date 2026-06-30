@@ -3,8 +3,27 @@ import { useAuth } from '@/lib/AuthContext';
 import { getSavedActiveCompanyId, saveActiveCompanyId } from '@/features/companies/services/activeCompanyStorage';
 import { loadCompanyContextData } from '@/features/companies/services/companyMembershipService';
 import { firebase } from '@/api/firebaseClient';
+import { getCurrentUser } from '@/infrastructure/firebase/auth';
 
 const CompanyContext = createContext(null);
+
+export async function refreshActiveCompanyIdToken(companyId) {
+  const currentUser = getCurrentUser();
+  if (!currentUser?.getIdToken) {
+    throw new Error('No hay una sesión Firebase activa para refrescar el token.');
+  }
+
+  await currentUser.getIdToken(true);
+  const tokenResult = currentUser.getIdTokenResult
+    ? await currentUser.getIdTokenResult(true)
+    : { claims: {} };
+  const refreshedCompanyId = tokenResult.claims?.companyId;
+  if (refreshedCompanyId && refreshedCompanyId !== companyId) {
+    throw new Error('El token refrescado no corresponde a la empresa activa.');
+  }
+
+  return tokenResult;
+}
 
 export function CompanyProvider({ children }) {
   const { user } = useAuth();
@@ -50,7 +69,7 @@ export function CompanyProvider({ children }) {
     if (!company?.id || !user) return;
     try {
       await firebase.functions.invoke('syncCompanyClaims', { companyId: company.id });
-      await user.getIdToken(true);
+      await refreshActiveCompanyIdToken(company.id);
     } catch (error) {
       console.warn('No se pudieron sincronizar los claims de empresa activa:', error);
     }

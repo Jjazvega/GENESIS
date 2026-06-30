@@ -13,6 +13,38 @@ service cloud.firestore {
       return request.auth.token.get('companyId', '');
     }
 
+    function tokenVersion(field) {
+      return request.auth.token.get(field, 0);
+    }
+
+    function dataVersion(data, field) {
+      return data.get(field, 1);
+    }
+
+    function currentMembership(companyId) {
+      return get(/databases/$(database)/documents/companyMembers/$(membershipId(companyId))).data;
+    }
+
+    function tokenMatchesCompanyVersions(companyId) {
+      return signedIn()
+        && companyExists(companyId)
+        && tokenVersion('companyVersion') == dataVersion(get(/databases/$(database)/documents/companies/$(companyId)).data, 'companyVersion')
+        && tokenVersion('claimsVersion') >= dataVersion(get(/databases/$(database)/documents/companies/$(companyId)).data, 'claimsVersion');
+    }
+
+    function tokenMatchesMembershipVersions(companyId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/companyMembers/$(membershipId(companyId)))
+        && tokenVersion('membershipVersion') == dataVersion(currentMembership(companyId), 'membershipVersion')
+        && tokenVersion('claimsVersion') >= dataVersion(currentMembership(companyId), 'claimsVersion');
+    }
+
+    function hasFreshCompanyToken(companyId) {
+      return sameCompany(companyId)
+        && tokenMatchesCompanyVersions(companyId)
+        && (isCompanyOwner(companyId) || tokenMatchesMembershipVersions(companyId));
+    }
+
     function sameCompany(companyId) {
       return signedIn()
         && companyId is string
@@ -77,18 +109,18 @@ service cloud.firestore {
     }
 
     function canReadCompany(companyId) {
-      return sameCompany(companyId)
+      return hasFreshCompanyToken(companyId)
         && (isCompanyOwner(companyId) || hasActiveMembership(companyId));
     }
 
     function canWriteCompany(companyId) {
-      return sameCompany(companyId)
+      return hasFreshCompanyToken(companyId)
         && (isCompanyOwner(companyId)
           || hasAnyCompanyRole(companyId, ['owner', 'director', 'admin', 'editor']));
     }
 
     function canManageCompany(companyId) {
-      return sameCompany(companyId)
+      return hasFreshCompanyToken(companyId)
         && (isCompanyOwner(companyId)
           || hasAnyCompanyRole(companyId, ['owner', 'director', 'admin']));
     }

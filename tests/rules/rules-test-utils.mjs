@@ -152,6 +152,8 @@ export async function seedCompany({ companyId, ownerUid, memberships = [] }) {
     name: `Empresa ${companyId}`,
     ownerUid,
     status: 'active',
+    companyVersion: 1,
+    claimsVersion: 1,
   }), 'admin company seed');
 
   for (const membership of memberships) {
@@ -160,6 +162,8 @@ export async function seedCompany({ companyId, ownerUid, memberships = [] }) {
       companyId,
       role: membership.role || 'viewer',
       status: membership.status || 'active',
+      membershipVersion: 1,
+      claimsVersion: 1,
       ...(membership.userUid ? { userUid: membership.userUid } : {}),
       ...(membership.userEmail ? { userEmail: membership.userEmail } : {}),
     }), `admin membership seed for ${memberId}`);
