@@ -10,46 +10,54 @@ const pageVariants = {
   in: { opacity: 1, x: 0 },
   out: { opacity: 0, x: -16 },
 };
+
 const pageTransition = { duration: 0.22, ease: 'easeInOut' };
+
+const APP_BACKGROUND = {
+  backgroundColor: '#050505',
+  backgroundImage: `
+    radial-gradient(circle at 55% -25%, rgba(246, 200, 74, 0.10), transparent 34%),
+    linear-gradient(45deg, rgba(255,255,255,0.012) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255,255,255,0.012) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255,255,255,0.012) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.012) 75%)
+  `,
+  backgroundSize: 'auto, 24px 24px, 24px 24px, 24px 24px, 24px 24px',
+  backgroundPosition: '0 0, 0 0, 0 12px, 12px -12px, -12px 0',
+};
 
 export default function AppLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const location = useLocation();
+  const sidebarWidth = sidebarCollapsed ? 80 : 310;
 
   return (
-    <div className="flex min-h-screen" style={{background: '#050505'}}>
-        {/* Desktop Sidebar */}
-        <div className="hidden md:block">
-          <Sidebar collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} />
+    <div className="min-h-screen" style={APP_BACKGROUND}>
+      <Sidebar collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} />
+      <MobileHeader />
+      <main
+        className="min-h-screen transition-all duration-300"
+        style={{
+          marginLeft: sidebarWidth,
+          paddingBottom: 'calc(56px + env(safe-area-inset-bottom))',
+        }}
+      >
+        <div className="mx-auto w-full max-w-[1800px]">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={location.pathname}
+              initial="initial"
+              animate="in"
+              exit="out"
+              variants={pageVariants}
+              transition={pageTransition}
+            >
+              <Outlet />
+            </motion.div>
+          </AnimatePresence>
         </div>
-        {/* Mobile Header + Modules Bar */}
-        <MobileHeader />
-        <main
-          className={`flex-1 min-h-screen transition-all duration-300 pt-14 md:pt-0 ${sidebarCollapsed ? 'md:ml-16' : 'md:ml-64'}`}
-          style={{
-            background: '#050505',
-            paddingBottom: 'calc(56px + env(safe-area-inset-bottom))',
-          }}
-        >
-          {/* Top gold accent line */}
-          <div className="hidden md:block h-px w-full" style={{background: 'linear-gradient(90deg, transparent, rgba(197,160,89,0.3), rgba(197,160,89,0.5), rgba(197,160,89,0.3), transparent)'}} />
-          <div className="p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={location.pathname}
-                initial="initial"
-                animate="in"
-                exit="out"
-                variants={pageVariants}
-                transition={pageTransition}
-              >
-                <Outlet />
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        </main>
-        {/* Mobile Bottom Navigation */}
-        <BottomNav />
+      </main>
+      <BottomNav />
     </div>
   );
 }

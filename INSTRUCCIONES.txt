@@ -1,0 +1,6 @@
+Este archivo corrige únicamente la visibilidad de la barra lateral y del logo.
+
+Reemplaza:
+src/components/layout/AppLayout.jsx
+
+No modifica Firebase, IA, base de datos, rutas, reglas ni funciones.
