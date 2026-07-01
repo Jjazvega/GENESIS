@@ -1,6 +1,6 @@
 // @ts-check
 
-import firebase from '@/api/firebaseClient';
+import firebase from '@/api/repoClient';
 import { logAction } from '@/lib/auditLogger';
 import { DOCUMENT_STATUSES } from '@/features/documents/constants/documentStatuses';
 import { ensureCorrelationId, getReleaseMetadata, logFrontendEvent } from '@/lib/observability';

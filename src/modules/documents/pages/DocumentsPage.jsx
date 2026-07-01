@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { DOCUMENT_STATUSES, firebase } from '@/api/firebaseClient';
+import { DOCUMENT_STATUSES } from '@/features/documents/constants/documentStatuses';
+import { firebase } from '@/api/repoClient';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { companyEntityQueryKey, useCompanyDocuments } from '@/lib/companyEntityQueries';
 import { useCompany } from '@/lib/companyContext';

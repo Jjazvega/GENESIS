@@ -1,6 +1,6 @@
 // @ts-check
 
-import { firebase } from '@/api/firebaseClient';
+import { firebase } from '@/api/repoClient';
 
 const ACTIVE_STATUS = 'active';
 const DEFAULT_INITIAL_OWNER_ROLE = 'director';

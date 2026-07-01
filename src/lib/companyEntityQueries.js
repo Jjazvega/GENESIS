@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { firebase } from '@/api/firebaseClient';
+import { firebase } from '@/api/repoClient';
 
 export const COMPANY_ENTITY_DEFAULT_LIMIT = 100;
 export const COMPANY_ENTITY_STALE_TIME = 5 * 60 * 1000;
