@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { validateDocumentFileContent } from '../../src/security/documentFileValidation.js';
+import { validateDocumentFileContent, validateDocumentStoragePath } from '../../src/security/documentFileValidation.js';
 
 function fileLike({ name, type, content }) {
   const blob = new Blob([content], { type });
@@ -30,6 +30,26 @@ describe('validación endurecida PDF/XML', () => {
     await assert.rejects(
       () => validateDocumentFileContent(fileLike({ name: 'factura.xml', type: 'application/xml', content: '<!DOCTYPE foo [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><foo />' })),
       /DOCTYPE\/ENTITY/,
+    );
+  });
+});
+
+describe('validación de storagePath interno', () => {
+  it('acepta rutas internas vinculadas a empresa y documento', () => {
+    assert.equal(
+      validateDocumentStoragePath('companies/acme/documents/doc-123/factura.pdf', { companyId: 'acme', documentId: 'doc-123' }),
+      'companies/acme/documents/doc-123/factura.pdf',
+    );
+  });
+
+  it('rechaza URLs públicas o rutas de otra empresa', () => {
+    assert.throws(
+      () => validateDocumentStoragePath('https://storage.example/doc.pdf', { companyId: 'acme', documentId: 'doc-123' }),
+      /storagePath interno/,
+    );
+    assert.throws(
+      () => validateDocumentStoragePath('companies/other/documents/doc-123/factura.pdf', { companyId: 'acme', documentId: 'doc-123' }),
+      /empresa activa/,
     );
   });
 });
