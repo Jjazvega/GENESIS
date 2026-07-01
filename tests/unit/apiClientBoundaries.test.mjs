@@ -7,10 +7,17 @@ const aiClientSource = await readFile(new URL('../../src/api/aiClient.js', impor
 const repoClientSource = await readFile(new URL('../../src/api/repoClient.js', import.meta.url), 'utf8');
 const authClientSource = await readFile(new URL('../../src/api/authClient.js', import.meta.url), 'utf8');
 
+// Helper: strip single-line comment lines before checking for declarations
+function stripComments(source) {
+  return source.split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
+}
+
 describe('firebaseClient: solo exporta primitivas de Firebase', () => {
   it('no contiene declaraciones de funciones de negocio', () => {
-    assert.doesNotMatch(firebaseClientSource, /^(?!\s*\/\/).*\bfunction\s+\w+/m);
-    assert.doesNotMatch(firebaseClientSource, /^(?!\s*\/\/).*\bclass\s+\w+/m);
+    const code = stripComments(firebaseClientSource);
+    // Precise pattern: actual function declarations (not merely the word "function" in a comment)
+    assert.doesNotMatch(code, /\b(?:export\s+)?(?:async\s+)?function\s+[a-zA-Z_$][\w$]*\s*\(/);
+    assert.doesNotMatch(code, /\bclass\s+[a-zA-Z_$][\w$]*/);
   });
 
   it('re-exporta los primitivos esperados de @/firebase', () => {
@@ -29,17 +36,28 @@ describe('firebaseClient: solo exporta primitivas de Firebase', () => {
 
 describe('aiClient: aislamiento de base de datos', () => {
   it('no importa db de @/firebase (sin acceso a Firestore)', () => {
-    const importMatch = aiClientSource.match(/import\s*\{([^}]+)\}\s*from\s*['"]@\/firebase['"]/);
-    if (importMatch) {
-      assert.doesNotMatch(importMatch[1], /\bdb\b/, 'aiClient.js no debe importar db de @/firebase');
+    const stripped = stripComments(aiClientSource);
+    // Check destructured imports
+    const destructuredMatch = stripped.match(/import\s*\{([^}]+)\}\s*from\s*['"]@\/firebase['"]/);
+    if (destructuredMatch) {
+      assert.doesNotMatch(destructuredMatch[1], /\bdb\b/, 'aiClient.js no debe importar db de @/firebase');
     }
+    // Check namespace imports
+    assert.doesNotMatch(stripped, /import\s*\*\s*as\s+\w+\s*from\s*['"]@\/firebase['"]/);
+    // Check default import (which would give indirect db access)
+    assert.doesNotMatch(stripped, /^import\s+[a-zA-Z_$][\w$]*\s*from\s*['"]@\/firebase['"]/m);
   });
 
   it('valida inputs con esquemas Zod', () => {
     assert.match(aiClientSource, /from 'zod'/);
     assert.match(aiClientSource, /InvokeLLMSchema/);
+    assert.match(aiClientSource, /InvokeFunctionSchema/);
     assert.match(aiClientSource, /z\.object/);
     assert.match(aiClientSource, /\.safeParse/);
+  });
+
+  it('usa InvokeFunctionSchema para validar invokeFunction', () => {
+    assert.match(aiClientSource, /InvokeFunctionSchema\.safeParse/);
   });
 
   it('no accede directamente a Firestore (colecciones internas)', () => {

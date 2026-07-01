@@ -100,8 +100,8 @@ export const agents = {
       messages: [],
       status: 'active',
     });
-    const { refDoc, payload: auditedPayload } = await mutations.add(collection(db, 'aiConversations'), payload);
-    return { id: refDoc.id, ...auditedPayload };
+    const { refDoc: conversationRef, payload: auditedPayload } = await mutations.add(collection(db, 'aiConversations'), payload);
+    return { id: conversationRef.id, ...auditedPayload };
   },
 
   addMessage: async (conversation, message) => {

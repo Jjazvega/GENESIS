@@ -155,9 +155,21 @@ function validateAiClientDbIsolation(issues) {
   const aiClientPath = resolve(ROOT, 'src/api/aiClient.js');
   if (!existsSync(aiClientPath)) return;
   const source = readFileSync(aiClientPath, 'utf8');
-  // Verify aiClient.js does NOT import 'db' from @/firebase
-  const importMatch = source.match(/import\s*\{([^}]+)\}\s*from\s*['"]@\/firebase['"]/);
-  if (importMatch && /\bdb\b/.test(importMatch[1])) {
+
+  // Strip single-line comments before checking to avoid false positives
+  const stripped = source.split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
+
+  // Check destructured imports: import { db, ... } from '@/firebase'
+  const destructuredMatch = stripped.match(/import\s*\{([^}]+)\}\s*from\s*['"]@\/firebase['"]/);
+  const hasDestructuredDb = destructuredMatch && /\bdb\b/.test(destructuredMatch[1]);
+
+  // Check namespace imports: import * as X from '@/firebase' (indirect access to db)
+  const hasNamespaceImport = /import\s*\*\s*as\s+\w+\s*from\s*['"]@\/firebase['"]/.test(stripped);
+
+  // Check default imports: import firebase from '@/firebase' (indirect access to db)
+  const hasDefaultImport = /import\s+[a-zA-Z_$][\w$]*\s*from\s*['"]@\/firebase['"]/.test(stripped);
+
+  if (hasDestructuredDb || hasNamespaceImport || hasDefaultImport) {
     addIssue(
       issues,
       'ai-client-isolation',
@@ -171,8 +183,16 @@ function validateFirebaseClientPrimitivesOnly(issues) {
   const clientPath = resolve(ROOT, 'src/api/firebaseClient.js');
   if (!existsSync(clientPath)) return;
   const source = readFileSync(clientPath, 'utf8');
-  // Check for function/class declarations that would indicate business logic
-  if (/^(?!\s*\/\/).*\bfunction\s+\w+/m.test(source) || /^(?!\s*\/\/).*\bclass\s+\w+/m.test(source)) {
+
+  // Strip comment-only lines to avoid false positives from commented examples
+  const codeLines = source.split('\n').filter((line) => !line.trim().startsWith('//'));
+  const codeOnly = codeLines.join('\n');
+
+  // Check for actual function/class declarations (not just the word appearing as part of other code)
+  const hasFunctionDecl = /\b(?:export\s+)?(?:async\s+)?function\s+[a-zA-Z_$][\w$]*\s*\(/.test(codeOnly);
+  const hasClassDecl = /\bclass\s+[a-zA-Z_$][\w$]*/.test(codeOnly);
+
+  if (hasFunctionDecl || hasClassDecl) {
     addIssue(
       issues,
       'firebase-client-primitives',

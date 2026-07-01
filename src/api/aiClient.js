@@ -145,8 +145,8 @@ export async function invokeLLM(params = {}) {
 // ── Internal function invocation (no database mutation access) ───────────────
 
 export async function invokeFunction(name, payload = {}) {
-  const nameValidation = z.string().trim().min(1).safeParse(name);
-  if (!nameValidation.success) throw new Error('Nombre de función inválido.');
+  const parsed = InvokeFunctionSchema.safeParse({ name, payload });
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || 'Nombre de función inválido.');
 
   const correlationId = ensureCorrelationId(payload.correlationId, name || 'fn');
   const endpoint = getSafeFunctionsEndpoint();
