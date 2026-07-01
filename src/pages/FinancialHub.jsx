@@ -13,6 +13,7 @@ import FinancialStatements from '@/features/finance/components/FinancialStatemen
 import RiskManagement from '@/features/finance/components/RiskManagement';
 import BudgetPlanner from '@/features/finance/components/BudgetPlanner';
 import ReportDownloader from '@/features/finance/components/ReportDownloader';
+import TransactionImporter from '@/features/finance/components/TransactionImporter';
 
 export default function FinancialHub() {
   const { activeCompany, memberships, loading: companyLoading } = useCompany();
@@ -76,6 +77,8 @@ export default function FinancialHub() {
         description="Estados financieros, gestión de riesgos y planificación de presupuestos en tiempo real."
         actions={<ReportDownloader transactions={transactions} company={activeCompany} />}
       />
+
+      <TransactionImporter activeCompany={activeCompany} user={user} />
 
       <Tabs defaultValue="statements" className="space-y-6">
         <TabsList className="bg-card border border-border p-1 rounded-xl flex-wrap h-auto gap-1">
