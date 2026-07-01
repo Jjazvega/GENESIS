@@ -41,6 +41,8 @@ async function authorizeAiRequest({ user, body }) {
 }
 
 async function aiHandler(req, res) {
+  // Secuencia visible: CORS/OPTIONS → Bearer Token Firebase Auth → membresía y rol en Firestore
+  // → empresa activa → aiRateLimits y aiUsage → proveedor LLM → respuesta, costo, tokens y auditoría.
   const startedAt = Date.now();
   const correlationId = getCorrelationId(req);
   applyCors(req, res);
@@ -52,19 +54,24 @@ async function aiHandler(req, res) {
 
   if (req.method === 'OPTIONS') {
     try { enforceAllowedOrigin(req); res.status(204).send(''); }
-    catch (error) { const status = Number(error.status) || 403; structuredLog('WARNING', 'ai_cors_preflight_rejected', { correlationId, origin: req.get('origin') || 'none', status }); res.status(status).json({ error: error.message || 'CORS no permitido.', correlationId, release: RELEASE_METADATA, code: 'CORS_FORBIDDEN', type: 'cors' }); }
+    catch (error) { const status = Number(error.status) || 403; structuredLog('WARNING', 'ai_cors_preflight_rejected', { correlationId, origin: req.get('origin') || 'none', status }); res.status(status).json({ error: error.message || 'CORS no permitido.', code: error.code || 'CORS_ORIGIN_DENIED', correlationId, release: RELEASE_METADATA }); }
     return;
   }
   if (req.method !== 'POST') { structuredLog('WARNING', 'ai_request_rejected', { correlationId, method: req.method, status: 405 }); res.status(405).json({ error: 'Método no permitido. Usa POST.', correlationId, release: RELEASE_METADATA }); return; }
 
   let authorization = null; let user = null; let reservation = null; let providerName = null; let modelName = null;
   try {
+    // 1) CORS ya fue aplicado y se exige antes de autenticar: los preflight OPTIONS no traen Bearer token.
     enforceAllowedOrigin(req);
+    // 2) Bearer Token Firebase Auth.
     user = await verifyFirebaseUser(req);
     const prompt = getPrompt(req.body);
+    // 3) Membresía, rol y empresa activa en Firestore.
     authorization = await authorizeAiRequest({ user, body: req.body || {} });
     const serverPrompt = composeAiPrompt({ prompt, authorization });
+    // 4) Cuotas y presupuesto en aiRateLimits y aiUsage.
     reservation = await enforceAiLimits({ user, authorization, prompt: serverPrompt, correlationId });
+    // 5) Proveedor LLM.
     providerName = getLlmProvider(); modelName = getLlmModel(providerName);
     const requestMetadata = { requestedDocumentCount: authorization.documents.length, promptLength: prompt.length, estimatedTokens: reservation.estimatedTokens, estimatedCostUsd: Number(reservation.estimatedCostUsd.toFixed(8)) };
     await writeAiAuditLog({ eventName: 'ai_request_started', status: 102, user, authorization, correlationId, provider: providerName, model: modelName, requestMetadata });
@@ -84,8 +91,7 @@ async function aiHandler(req, res) {
     try { await writeAiAuditLog({ eventName: 'ai_request_failed', status, user, authorization, correlationId, provider: providerName || null, model: modelName || null, requestMetadata: { companyId: req.body?.companyId, requestedDocumentCount: authorization?.documents?.length || 0, promptLength: typeof req.body?.prompt === 'string' ? req.body.prompt.length : 0, estimatedTokens: reservation?.estimatedTokens, estimatedCostUsd: reservation?.estimatedCostUsd }, errorMessage: error.message || 'No se pudo completar la consulta de IA.' }); }
     catch (auditError) { structuredLog('ERROR', 'ai_audit_log_failed', { correlationId, status: Number(auditError.status) || 500, message: auditError.message || 'No se pudo registrar auditoría IA.' }); }
     structuredLog(status >= 500 ? 'ERROR' : 'WARNING', 'ai_request_failed', { correlationId, status, latencyMs: Date.now() - startedAt, message: error.message || 'No se pudo completar la consulta de IA.' });
-    const errorContract = classifyAiHttpError(error, status);
-    res.status(status).json({ error: error.message || 'No se pudo completar la consulta de IA.', correlationId, ...(authorization?.companyId ? { companyId: authorization.companyId } : {}), release: RELEASE_METADATA, ...errorContract });
+    res.status(status).json({ error: error.message || 'No se pudo completar la consulta de IA.', ...(error.code ? { code: error.code } : {}), correlationId, ...(authorization?.companyId ? { companyId: authorization.companyId } : {}), release: RELEASE_METADATA });
   }
 }
 module.exports = { aiHandler, getCorrelationId, getPrompt, classifyAiHttpError, authorizeAiRequest, getAllowedOrigins, enforceAllowedOrigin, getAiLimitConfig, estimateTokenCount, getUsageTokens, calculateCostUsd };

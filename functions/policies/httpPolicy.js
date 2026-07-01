@@ -5,11 +5,10 @@ const DEFAULT_ALLOWED_ORIGINS = Object.freeze([
   'https://gemailla-enterprise.web.app',
 ]);
 
-function fail(status, message, code = undefined, type = undefined) {
+function fail(status, message, code) {
   const error = new Error(message);
   error.status = status;
   if (code) error.code = code;
-  if (type) error.type = type;
   throw error;
 }
 
@@ -41,7 +40,7 @@ function enforceAllowedOrigin(req) {
 
   const allowedOrigins = getAllowedOrigins();
   if (!allowedOrigins.includes(requestOrigin)) {
-    fail(403, 'CORS no permitido para este origen.', 'CORS_FORBIDDEN', 'cors');
+    fail(403, 'CORS no permitido para este origen.', 'CORS_ORIGIN_DENIED');
   }
 }
 
