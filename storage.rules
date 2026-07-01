@@ -36,7 +36,9 @@ service firebase.storage {
 
     function canWriteCompanyDocuments(companyId) {
       return hasCompanyToken(companyId)
-        && request.auth.token.companyRole in ['owner', 'director', 'admin', 'editor'];
+        && request.auth.token.companyRole in ['owner', 'director', 'admin', 'editor']
+        && membershipDoc(companyId).get('role', null) in ['owner', 'director', 'admin', 'editor']
+        && membershipDoc(companyId).get('status', null) == 'active';
     }
 
     function hasExistingObjectMetadata(companyId, documentId) {

@@ -15,14 +15,14 @@ async function validateCompanyAccess({ user, companyId }) {
   if (!companySnap.exists) fail(403, 'Empresa no válida o sin acceso.');
   const company = companySnap.data() || {};
   if (!isActiveStatus(company.status)) fail(403, 'La empresa no está activa para usar IA.');
-  const ownerUid = company.ownerUid || company.createdBy;
-  if (ownerUid === user.uid) return { companyRef, company, role: 'owner', membership: null };
   const membershipId = `${companyId}_${user.uid}`;
   const membershipSnap = await admin.firestore().collection('companyMembers').doc(membershipId).get();
   if (!membershipSnap.exists) fail(403, 'Se requiere membresía activa en la empresa para usar IA.');
   const membership = membershipSnap.data() || {};
   if (membership.companyId !== companyId || membership.userUid !== user.uid || !isActiveStatus(membership.status)) fail(403, 'Se requiere membresía activa en la empresa para usar IA.');
   const role = String(membership.role || '').trim().toLowerCase();
+  const ownerUid = company.ownerUid || company.createdBy;
+  if (ownerUid === user.uid && role === 'owner') return { companyRef, company, role: 'owner', membership };
   if (!AI_ALLOWED_ROLES.has(role)) fail(403, 'Tu rol no permite usar IA en esta empresa.');
   return { companyRef, company, role, membership };
 }

@@ -14,15 +14,15 @@ import {
 const companyId = 'company-firestore';
 const otherCompanyId = 'company-other';
 const claimVersions = { membershipVersion: 1, companyVersion: 1, claimsVersion: 1 };
-const owner = { uid: 'owner-uid', claims: { email: 'owner@gemailla.test', email_verified: true, companyId, ...claimVersions, companyRole: 'owner' } };
-const director = { uid: 'director-uid', claims: { email: 'director@gemailla.test', email_verified: true, companyId, ...claimVersions, companyRole: 'director' } };
-const admin = { uid: 'admin-uid', claims: { email: 'admin@gemailla.test', email_verified: true, companyId, ...claimVersions, companyRole: 'admin' } };
-const editor = { uid: 'editor-uid', claims: { email: 'editor@gemailla.test', email_verified: true, companyId, ...claimVersions, companyRole: 'editor' } };
-const viewer = { uid: 'viewer-uid', claims: { email: 'viewer@gemailla.test', email_verified: true, companyId, ...claimVersions, companyRole: 'viewer' } };
-const inactive = { uid: 'inactive-uid', claims: { email: 'inactive@gemailla.test', email_verified: true, companyId, ...claimVersions, companyRole: 'editor' } };
-const outsider = { uid: 'outsider-uid', claims: { email: 'outsider@gemailla.test', email_verified: true, companyId: otherCompanyId, ...claimVersions, companyRole: 'admin' } };
-const noMembership = { uid: 'no-membership-uid', claims: { email: 'no-membership@gemailla.test', email_verified: true, companyId, ...claimVersions, companyRole: 'admin' } };
-const legacyEmailUser = { uid: 'legacy-new-uid', claims: { email: 'legacy@gemailla.test', email_verified: true, companyId, ...claimVersions, companyRole: 'director' } };
+const owner = { uid: 'owner-uid', claims: { email: 'owner@gemailla.test', email_verified: true, companyId, ...claimVersions, companyRole: 'owner', membershipStatus: 'active' } };
+const director = { uid: 'director-uid', claims: { email: 'director@gemailla.test', email_verified: true, companyId, ...claimVersions, companyRole: 'director', membershipStatus: 'active' } };
+const admin = { uid: 'admin-uid', claims: { email: 'admin@gemailla.test', email_verified: true, companyId, ...claimVersions, companyRole: 'admin', membershipStatus: 'active' } };
+const editor = { uid: 'editor-uid', claims: { email: 'editor@gemailla.test', email_verified: true, companyId, ...claimVersions, companyRole: 'editor', membershipStatus: 'active' } };
+const viewer = { uid: 'viewer-uid', claims: { email: 'viewer@gemailla.test', email_verified: true, companyId, ...claimVersions, companyRole: 'viewer', membershipStatus: 'active' } };
+const inactive = { uid: 'inactive-uid', claims: { email: 'inactive@gemailla.test', email_verified: true, companyId, ...claimVersions, companyRole: 'editor', membershipStatus: 'active' } };
+const outsider = { uid: 'outsider-uid', claims: { email: 'outsider@gemailla.test', email_verified: true, companyId: otherCompanyId, ...claimVersions, companyRole: 'admin', membershipStatus: 'active' } };
+const noMembership = { uid: 'no-membership-uid', claims: { email: 'no-membership@gemailla.test', email_verified: true, companyId, ...claimVersions, companyRole: 'admin', membershipStatus: 'active' } };
+const legacyEmailUser = { uid: 'legacy-new-uid', claims: { email: 'legacy@gemailla.test', email_verified: true, companyId, ...claimVersions, companyRole: 'director', membershipStatus: 'active' } };
 
 async function seedFirestoreAcl() {
   await seedCompany({
@@ -246,6 +246,34 @@ describe('Firestore security rules', () => {
     }, admin), 'admin membership role update');
   });
 
+  it('prevents non-owner administrators from granting the owner role', async () => {
+    await assertDenied(firestoreSet(`companyMembers/${companyId}_admin_owner_invite`, {
+      companyId,
+      userUid: 'admin-owner-invite-uid',
+      userEmail: 'admin-owner-invite@gemailla.test',
+      role: 'owner',
+      status: 'pending',
+      createdBy: admin.uid,
+    }, admin), 'admin owner membership invite create');
+
+    await assertDenied(firestorePatch(`companyMembers/${companyId}_${viewer.uid}`, {
+      companyId,
+      userUid: viewer.uid,
+      userEmail: viewer.claims.email,
+      role: 'owner',
+      status: 'active',
+      updatedBy: admin.uid,
+    }, admin), 'admin owner role escalation update');
+
+    await assertDenied(firestorePatch(`companyMembers/${companyId}_${owner.uid}`, {
+      companyId,
+      userUid: owner.uid,
+      role: 'director',
+      status: 'active',
+      updatedBy: admin.uid,
+    }, admin), 'admin owner membership demotion update');
+  });
+
   it('allows an active editor to modify permitted documents', async () => {
     await assertAllowed(firestoreGet('documents/protected-doc', editor), 'editor document read');
     await assertAllowed(firestorePatch('documents/protected-doc', {
@@ -407,7 +435,7 @@ describe('Firestore security rules', () => {
   });
 
   it('allows UID-based member reads when the auth token has no email claim', async () => {
-    const noEmailViewer = { uid: viewer.uid, claims: { email_verified: true, companyId, ...claimVersions, companyRole: 'viewer' } };
+    const noEmailViewer = { uid: viewer.uid, claims: { email_verified: true, companyId, ...claimVersions, companyRole: 'viewer', membershipStatus: 'active' } };
 
     await assertAllowed(
       firestoreGet(`companyMembers/${companyId}_${viewer.uid}`, noEmailViewer),
@@ -423,7 +451,7 @@ describe('Firestore security rules', () => {
   it('denies company records when the auth companyId claim does not match the document tenant', async () => {
     const mismatchedEditor = {
       uid: editor.uid,
-      claims: { email: editor.claims.email, email_verified: true, companyId: otherCompanyId, companyRole: 'editor' },
+      claims: { email: editor.claims.email, email_verified: true, companyId: otherCompanyId, companyRole: 'editor', membershipStatus: 'active' },
     };
 
     await assertDenied(firestoreGet('documents/protected-doc', mismatchedEditor), 'mismatched claim document read');

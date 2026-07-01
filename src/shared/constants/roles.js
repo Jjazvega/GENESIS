@@ -1,8 +1,9 @@
 export const ROLES = Object.freeze({
+  OWNER: 'owner',
   DIRECTOR: 'director',
   ADMIN: 'admin',
-  MEMBER: 'miembro',
-  GUEST: 'invitado',
+  EDITOR: 'editor',
+  VIEWER: 'viewer',
 });
 
 export const COMPANY_ROLES = Object.values(ROLES);
