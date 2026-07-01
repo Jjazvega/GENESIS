@@ -31,6 +31,11 @@ const PUBLIC_VITE_ALLOWLIST = new Set([
   'VITE_DEPLOY_ENV',
 ]);
 const SENSITIVE_VITE_PATTERN = /VITE_[A-Z0-9_]*(SECRET|PRIVATE|TOKEN|PASSWORD|PASS|OPENAI|STRIPE_SECRET|SERVICE_ACCOUNT|CLIENT_SECRET|WEBHOOK_SECRET|ADMIN|CREDENTIAL)[A-Z0-9_]*/g;
+const RETIRED_FEATURE_DIRS = [
+  'src/features/crm',
+  'src/features/erp',
+  'src/features/operations',
+];
 
 function walk(dir, files = []) {
   for (const entry of readdirSync(dir)) {
@@ -72,6 +77,14 @@ function validateFirebaseImports(issues) {
     const source = readFileSync(abs, 'utf8');
     for (const match of source.matchAll(importPattern)) {
       addIssue(issues, 'firebase-imports', repoPath, `Import directo/alternativo de Firebase no permitido fuera de src/infrastructure: ${match[1] || match[2]}. Usa el facade de infraestructura/API.`);
+    }
+  }
+}
+
+function validateRetiredFeatureDirs(issues) {
+  for (const dir of RETIRED_FEATURE_DIRS) {
+    if (existsSync(resolve(ROOT, dir))) {
+      addIssue(issues, 'retired-feature-dirs', dir, 'Directorio fuera del alcance Core. El Core solo mantiene Dashboard, Empresas, Documentos, Finanzas e IA; documenta un RFC antes de reincorporarlo.');
     }
   }
 }
@@ -216,6 +229,7 @@ function parseArgs(argv) {
 function main() {
   const options = parseArgs(process.argv.slice(2));
   const issues = [];
+  validateRetiredFeatureDirs(issues);
   validateFirebaseImports(issues);
   validateFeatureCompanyGuards(issues);
   validateSensitiveViteVariables(issues);
@@ -230,7 +244,7 @@ function main() {
   }
 
   const remoteText = options.project ? ` e índices remotos del proyecto ${options.project}` : ' (índices remotos omitidos; usa --project=<id> en CI con credenciales)';
-  console.log(`✅ Arquitectura validada: imports Firebase, guards company.id, VITE sensibles, aislamiento aiClient, primitivas firebaseClient, repoClient composicional e índices Firestore${remoteText}.`);
+  console.log(`✅ Arquitectura validada: alcance Core, imports Firebase, guards company.id, VITE sensibles, aislamiento aiClient, primitivas firebaseClient, repoClient composicional e índices Firestore${remoteText}.`);
 }
 
 main();
