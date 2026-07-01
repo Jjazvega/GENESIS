@@ -1,4 +1,5 @@
-import { firebase, invokeLLM } from '@/api/firebaseClient';
+import { firebase } from '@/api/repoClient';
+import { invokeLLM } from '@/api/aiClient';
 
 export async function askLLM(params) {
   return invokeLLM(params);

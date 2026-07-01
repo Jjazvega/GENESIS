@@ -1,6 +1,7 @@
 // @ts-check
 
-import firebase, { isAiDisabledResponse } from '@/api/firebaseClient';
+import firebase from '@/api/repoClient';
+import { isAiDisabledResponse } from '@/api/aiClient';
 import { logAction } from '@/lib/auditLogger';
 import { DOCUMENT_STATUSES } from '@/features/documents/constants/documentStatuses';
 import { ensureCorrelationId, getReleaseMetadata, logFrontendEvent } from '@/lib/observability';

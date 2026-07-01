@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { firebase } from '@/api/firebaseClient';
+import { firebase } from '@/api/repoClient';
 import { useCompany } from '@/lib/companyContext';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';

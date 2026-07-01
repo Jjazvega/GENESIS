@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { useAuth } from '@/lib/AuthContext';
 import { getSavedActiveCompanyId, saveActiveCompanyId } from '@/features/companies/services/activeCompanyStorage';
 import { loadCompanyContextData } from '@/features/companies/services/companyMembershipService';
-import { firebase } from '@/api/firebaseClient';
+import { firebase } from '@/api/repoClient';
 import { getCurrentUser } from '@/infrastructure/firebase/auth';
 
 const CompanyContext = createContext(null);
