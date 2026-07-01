@@ -14,7 +14,9 @@ const ALLOWED_FIREBASE_IMPORT_FILES = new Set([
   'src/api/firebaseClient.js', // re-exports primitives only
   'src/api/authClient.js',     // auth + user-profile mutations
   'src/api/aiClient.js',       // AI HTTP calls (auth token read-only)
-  'src/api/repoClient.js',     // entity repositories and agents
+  'src/api/repoClient.js',     // facade composition only
+  'src/api/entityClient.js',   // entity repositories and company creation
+  'src/api/agentClient.js',    // AI conversations
 ]);
 const PUBLIC_VITE_ALLOWLIST = new Set([
   'VITE_FIREBASE_API_KEY',
@@ -228,7 +230,7 @@ function main() {
   }
 
   const remoteText = options.project ? ` e índices remotos del proyecto ${options.project}` : ' (índices remotos omitidos; usa --project=<id> en CI con credenciales)';
-  console.log(`✅ Arquitectura validada: imports Firebase, guards company.id, VITE sensibles, aislamiento aiClient, primitivas firebaseClient e índices Firestore${remoteText}.`);
+  console.log(`✅ Arquitectura validada: imports Firebase, guards company.id, VITE sensibles, aislamiento aiClient, primitivas firebaseClient, repoClient composicional e índices Firestore${remoteText}.`);
 }
 
 main();
