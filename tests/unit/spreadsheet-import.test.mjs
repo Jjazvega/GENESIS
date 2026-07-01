@@ -70,3 +70,32 @@ test('no conserva importadores retirados fuera del alcance Core', () => {
     assert.equal(existsSync(resolve(dir)), false, `${dir} debe permanecer fuera del Core`);
   }
 });
+
+test('parseDelimitedText cubre delimitadores alternos, BOM, CRLF, comillas escapadas y filas vacías', () => {
+  const matrix = parseDelimitedText('\uFEFFnombre;nota;activo\r\n"Empresa Uno";"Dijo ""hola""";true\r\n\r\nEmpresa Dos;sin comillas;false\r\n');
+  assert.deepEqual(matrix, [
+    ['nombre', 'nota', 'activo'],
+    ['Empresa Uno', 'Dijo "hola"', 'true'],
+    ['Empresa Dos', 'sin comillas', 'false'],
+  ]);
+});
+
+test('parseDelimitedText falla temprano con comillas sin cerrar', () => {
+  assert.throws(
+    () => parseDelimitedText('nombre,nota\nEmpresa,"valor sin cerrar'),
+    /comillas sin cerrar/i,
+  );
+});
+
+test('matrixToRecords rechaza encabezados vacíos, archivos sin registros y límites excedidos', () => {
+  assert.throws(() => matrixToRecords([['Nombre', '   '], ['Empresa', 'valor']]), /encabezados.*vacíos/i);
+  assert.throws(() => matrixToRecords([['Nombre'], ['   ']]), /no tiene registros/i);
+  assert.throws(() => matrixToRecords([['Nombre'], ['Uno'], ['Dos']], { maxRows: 1 }), /límite de 1 registros/i);
+});
+
+test('readSpreadsheetFile rechaza entradas inválidas, extensiones inseguras, archivos vacíos y tamaño excesivo', async () => {
+  await assert.rejects(() => readSpreadsheetFile(null), /archivo CSV o Excel/i);
+  await assert.rejects(() => readSpreadsheetFile(asFile('clientes.xls', [1, 2, 3])), /Formato no soportado/i);
+  await assert.rejects(() => readSpreadsheetFile({ name: 'clientes.csv', size: 0, arrayBuffer: async () => new ArrayBuffer(0) }), /vacío o es inválido/i);
+  await assert.rejects(() => readSpreadsheetFile(asFile('clientes.csv', strToU8('name\nEmpresa\n')), { maxFileSizeBytes: 1 }), /supera el límite/i);
+});
