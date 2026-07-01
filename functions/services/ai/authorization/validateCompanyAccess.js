@@ -12,18 +12,18 @@ function isActiveStatus(status) { return ACTIVE_STATUSES.has(String(status || ''
 async function validateCompanyAccess({ user, companyId }) {
   const companyRef = admin.firestore().collection('companies').doc(companyId);
   const companySnap = await companyRef.get();
-  if (!companySnap.exists) fail(403, 'Empresa no válida o sin acceso.');
+  if (!companySnap.exists) fail(403, 'Empresa no válida o sin acceso.', 'AI_PERMISSION_DENIED', 'permission');
   const company = companySnap.data() || {};
-  if (!isActiveStatus(company.status)) fail(403, 'La empresa no está activa para usar IA.');
+  if (!isActiveStatus(company.status)) fail(403, 'La empresa no está activa para usar IA.', 'AI_PERMISSION_DENIED', 'permission');
   const membershipId = `${companyId}_${user.uid}`;
   const membershipSnap = await admin.firestore().collection('companyMembers').doc(membershipId).get();
-  if (!membershipSnap.exists) fail(403, 'Se requiere membresía activa en la empresa para usar IA.');
+  if (!membershipSnap.exists) fail(403, 'Se requiere membresía activa en la empresa para usar IA.', 'AI_PERMISSION_DENIED', 'permission');
   const membership = membershipSnap.data() || {};
-  if (membership.companyId !== companyId || membership.userUid !== user.uid || !isActiveStatus(membership.status)) fail(403, 'Se requiere membresía activa en la empresa para usar IA.');
+  if (membership.companyId !== companyId || membership.userUid !== user.uid || !isActiveStatus(membership.status)) fail(403, 'Se requiere membresía activa en la empresa para usar IA.', 'AI_PERMISSION_DENIED', 'permission');
   const role = String(membership.role || '').trim().toLowerCase();
   const ownerUid = company.ownerUid || company.createdBy;
   if (ownerUid === user.uid && role === 'owner') return { companyRef, company, role: 'owner', membership };
-  if (!AI_ALLOWED_ROLES.has(role)) fail(403, 'Tu rol no permite usar IA en esta empresa.');
+  if (!AI_ALLOWED_ROLES.has(role)) fail(403, 'Tu rol no permite usar IA en esta empresa.', 'AI_PERMISSION_DENIED', 'permission');
   return { companyRef, company, role, membership };
 }
 module.exports = { requireCompanyId, isActiveStatus, validateCompanyAccess };
