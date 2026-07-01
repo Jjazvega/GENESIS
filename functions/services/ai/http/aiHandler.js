@@ -17,6 +17,15 @@ function getCorrelationId(req) {
   if (!candidate) return createCorrelationId('ai');
   return candidate.replace(/[^a-zA-Z0-9._:-]/g, '_').slice(0, MAX_CORRELATION_ID_LENGTH) || createCorrelationId('ai');
 }
+function classifyAiHttpError(error, status) {
+  if (error?.code && error?.type) return { code: error.code, type: error.type };
+  if (status === 403) return { code: 'AI_PERMISSION_DENIED', type: 'permission' };
+  if (status === 401) return { code: 'AUTH_REQUIRED', type: 'auth' };
+  if (status === 429) return { code: 'AI_QUOTA_EXCEEDED', type: 'quota' };
+  if (status >= 400 && status < 500) return { code: 'AI_BAD_REQUEST', type: 'validation' };
+  return { code: 'AI_INTERNAL_ERROR', type: 'server' };
+}
+
 function getPrompt(body = {}) {
   const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
   if (!prompt) { const error = new Error('El campo prompt es obligatorio.'); error.status = 400; throw error; }
@@ -85,4 +94,4 @@ async function aiHandler(req, res) {
     res.status(status).json({ error: error.message || 'No se pudo completar la consulta de IA.', ...(error.code ? { code: error.code } : {}), correlationId, ...(authorization?.companyId ? { companyId: authorization.companyId } : {}), release: RELEASE_METADATA });
   }
 }
-module.exports = { aiHandler, getCorrelationId, getPrompt, authorizeAiRequest, getAllowedOrigins, enforceAllowedOrigin, getAiLimitConfig, estimateTokenCount, getUsageTokens, calculateCostUsd };
+module.exports = { aiHandler, getCorrelationId, getPrompt, classifyAiHttpError, authorizeAiRequest, getAllowedOrigins, enforceAllowedOrigin, getAiLimitConfig, estimateTokenCount, getUsageTokens, calculateCostUsd };
