@@ -3,7 +3,7 @@
 import { auth, storage } from '@/firebase';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { ensureCorrelationId, logFrontendEvent } from '@/lib/observability';
-import { validateDocumentFileContent } from '@/security/documentFileValidation';
+import { validateDocumentFileContent, validateDocumentStoragePath } from '@/security/documentFileValidation';
 
 function getCurrentUser() {
   return auth.currentUser || null;
@@ -82,11 +82,8 @@ export async function getDocumentAccessUrl(storagePath) {
     throw new Error('No se puede abrir el documento sin storagePath.');
   }
 
-  const allowedDocumentPath = /^companies\/[^/]+\/documents\/[^/]+\/.+$/;
-  if (!allowedDocumentPath.test(safeStoragePath) || /^https?:\/\//i.test(safeStoragePath)) {
-    throw new Error('Ruta de documento inválida. Usa storagePath interno, no URLs públicas.');
-  }
+  const validatedStoragePath = validateDocumentStoragePath(safeStoragePath);
 
-  const fileRef = ref(storage, safeStoragePath);
+  const fileRef = ref(storage, validatedStoragePath);
   return getDownloadURL(fileRef);
 }

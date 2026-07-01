@@ -96,17 +96,16 @@ describe('aiClient: aislamiento de base de datos', () => {
 });
 
 describe('repoClient: exposición del facade de dominio', () => {
-  it('importa operaciones AI desde aiClient (no las reimplementa)', () => {
+  it('ensambla clientes de dominio sin importar Firebase ni Firestore', () => {
     assert.match(repoClientSource, /from '@\/api\/aiClient'/);
-    assert.match(repoClientSource, /invokeLLM/);
-    assert.match(repoClientSource, /invokeFunction/);
-  });
-
-  it('importa operaciones de auth desde authClient (no las reimplementa)', () => {
     assert.match(repoClientSource, /from '@\/api\/authClient'/);
-    assert.match(repoClientSource, /getCurrentUser/);
-    assert.match(repoClientSource, /me,/);
-    assert.match(repoClientSource, /logout,/);
+    assert.match(repoClientSource, /from '@\/api\/entityClient'/);
+    assert.match(repoClientSource, /from '@\/api\/agentClient'/);
+    assert.doesNotMatch(repoClientSource, /from ['"]@\/firebase['"]/);
+    assert.doesNotMatch(repoClientSource, /from ['"]firebase\//);
+    assert.doesNotMatch(repoClientSource, /collection\(db/);
+    assert.doesNotMatch(repoClientSource, /doc\(db/);
+    assert.doesNotMatch(repoClientSource, /runTransaction\(/);
   });
 
   it('exporta el facade firebase como default y named export', () => {

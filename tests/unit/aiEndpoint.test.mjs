@@ -209,6 +209,7 @@ function seedBase(overrides = {}) {
       memberCompany: { status: 'active', ownerUid: 'other-owner' },
     },
     companyMembers: {
+      'validCompany_owner-uid': { companyId: 'validCompany', userUid: 'owner-uid', status: 'active', role: 'owner' },
       memberCompany_memberUid: { companyId: 'memberCompany', userUid: 'memberUid', status: 'active', role: 'admin' },
       memberCompany_inactiveMember: { companyId: 'memberCompany', userUid: 'inactiveMember', status: 'inactive', role: 'admin' },
       memberCompany_blockedRole: { companyId: 'memberCompany', userUid: 'blockedRole', status: 'active', role: 'guest' },

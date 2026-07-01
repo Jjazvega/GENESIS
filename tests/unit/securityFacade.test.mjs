@@ -4,6 +4,8 @@ import { describe, it } from 'node:test';
 
 const authClientSource = await readFile(new URL('../../src/api/authClient.js', import.meta.url), 'utf8');
 const repoClientSource = await readFile(new URL('../../src/api/repoClient.js', import.meta.url), 'utf8');
+const entityClientSource = await readFile(new URL('../../src/api/entityClient.js', import.meta.url), 'utf8');
+const agentClientSource = await readFile(new URL('../../src/api/agentClient.js', import.meta.url), 'utf8');
 const architectureSource = await readFile(new URL('../../scripts/validate-architecture.js', import.meta.url), 'utf8');
 
 describe('authClient: controles de seguridad de perfil', () => {
@@ -15,13 +17,13 @@ describe('authClient: controles de seguridad de perfil', () => {
   });
 });
 
-describe('repoClient: controles de seguridad de empresa y conversaciones', () => {
+describe('clientes de dominio: controles de seguridad de empresa y conversaciones', () => {
   it('createCompanyWithInitialOwner no permite companyData.ownerUid ni membershipData.userUid ajenos', () => {
-    assert.match(repoClientSource, /const requestedOwnerUid = membershipData\.userUid \|\| companyData\.ownerUid \|\| currentUid;/);
-    assert.match(repoClientSource, /requestedOwnerUid && currentUid && requestedOwnerUid !== currentUid/);
-    assert.match(repoClientSource, /No puedes crear empresas ni membresías iniciales para otro usuario/);
-    assert.match(repoClientSource, /ownerUid: userUid/);
-    assert.match(repoClientSource, /userUid,/);
+    assert.match(entityClientSource, /const requestedOwnerUid = membershipData\.userUid \|\| companyData\.ownerUid \|\| currentUid;/);
+    assert.match(entityClientSource, /requestedOwnerUid && currentUid && requestedOwnerUid !== currentUid/);
+    assert.match(entityClientSource, /No puedes crear empresas ni membresías iniciales para otro usuario/);
+    assert.match(entityClientSource, /ownerUid: userUid/);
+    assert.match(entityClientSource, /userUid,/);
   });
 
   it('agents.addMessage delega la validación y persistencia de IA al backend seguro', () => {
@@ -50,5 +52,7 @@ describe('arquitectura de imports Firebase', () => {
     assert.match(architectureSource, /authClient\.js/);
     assert.match(architectureSource, /aiClient\.js/);
     assert.match(architectureSource, /repoClient\.js/);
+    assert.match(architectureSource, /entityClient\.js/);
+    assert.match(architectureSource, /agentClient\.js/);
   });
 });

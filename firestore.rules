@@ -42,7 +42,7 @@ service cloud.firestore {
     function hasFreshCompanyToken(companyId) {
       return sameCompany(companyId)
         && tokenMatchesCompanyVersions(companyId)
-        && (isCompanyOwner(companyId) || tokenMatchesMembershipVersions(companyId));
+        && tokenMatchesMembershipVersions(companyId);
     }
 
     function sameCompany(companyId) {
@@ -52,10 +52,11 @@ service cloud.firestore {
         && currentCompanyId() == companyId;
     }
 
-    function isAdmin() {
-      return signedIn()
-        && (request.auth.token.get('role', null) in ['owner', 'director', 'admin']
-          || request.auth.token.get('companyRole', null) in ['owner', 'director', 'admin']);
+    function isAdminForCompany(companyId) {
+      return hasFreshCompanyToken(companyId)
+        && request.auth.token.get('membershipStatus', null) == 'active'
+        && request.auth.token.get('companyRole', null) in ['owner', 'director', 'admin']
+        && hasAnyCompanyRole(companyId, ['owner', 'director', 'admin']);
     }
 
     function hasField(data, field) {
@@ -110,19 +111,25 @@ service cloud.firestore {
 
     function canReadCompany(companyId) {
       return hasFreshCompanyToken(companyId)
-        && (isCompanyOwner(companyId) || hasActiveMembership(companyId));
+        && hasActiveMembership(companyId);
     }
 
     function canWriteCompany(companyId) {
       return hasFreshCompanyToken(companyId)
-        && (isCompanyOwner(companyId)
-          || hasAnyCompanyRole(companyId, ['owner', 'director', 'admin', 'editor']));
+        && hasAnyCompanyRole(companyId, ['owner', 'director', 'admin', 'editor']);
     }
 
     function canManageCompany(companyId) {
       return hasFreshCompanyToken(companyId)
-        && (isCompanyOwner(companyId)
-          || hasAnyCompanyRole(companyId, ['owner', 'director', 'admin']));
+        && hasAnyCompanyRole(companyId, ['owner', 'director', 'admin']);
+    }
+
+    function canAssignCompanyRole(companyId, role) {
+      return role != 'owner' || hasAnyCompanyRole(companyId, ['owner']);
+    }
+
+    function canManageTargetMembership(companyId) {
+      return resource.data.get('role', null) != 'owner' || hasAnyCompanyRole(companyId, ['owner']);
     }
 
     function canCreateInitialOwnerMembership(memberId) {
@@ -132,7 +139,7 @@ service cloud.firestore {
         && memberId == membershipId(companyId)
         && request.resource.data.get('userUid', null) == currentUid()
         && request.resource.data.get('status', null) == 'active'
-        && request.resource.data.get('role', null) in ['owner', 'director']
+        && request.resource.data.get('role', null) == 'owner'
         && existsAfter(/databases/$(database)/documents/companies/$(companyId))
         && getAfter(/databases/$(database)/documents/companies/$(companyId)).data.ownerUid == currentUid();
     }
@@ -274,17 +281,15 @@ service cloud.firestore {
     }
 
     function canCreateAiBudget() {
-      return isAdmin()
-        && hasCompanyId(request.resource.data)
-        && sameCompany(request.resource.data.companyId);
+      return hasCompanyId(request.resource.data)
+        && isAdminForCompany(request.resource.data.companyId);
     }
 
     function canUpdateAiBudget() {
-      return isAdmin()
-        && hasCompanyId(resource.data)
+      return hasCompanyId(resource.data)
         && hasCompanyId(request.resource.data)
         && request.resource.data.companyId == resource.data.companyId
-        && sameCompany(resource.data.companyId);
+        && isAdminForCompany(resource.data.companyId);
     }
 
     function canReadAiFinancialData(data) {
@@ -321,7 +326,8 @@ service cloud.firestore {
         && hasCompanyId(request.resource.data)
         && (canManageCompany(request.resource.data.companyId) || canCreateInitialOwnerMembership(memberId))
         && request.resource.data.get('status', null) in ['active', 'pending', 'archived']
-        && request.resource.data.get('role', null) in ['owner', 'director', 'admin', 'editor', 'viewer', 'invitado'];
+        && request.resource.data.get('role', null) in ['owner', 'director', 'admin', 'editor', 'viewer']
+        && canAssignCompanyRole(request.resource.data.companyId, request.resource.data.get('role', null));
 
       allow read: if signedIn()
         && hasCompanyId(resource.data)
@@ -336,14 +342,16 @@ service cloud.firestore {
         && hasCompanyId(request.resource.data)
         && request.resource.data.companyId == resource.data.companyId
         && canManageCompany(resource.data.companyId)
-        && request.resource.data.get('role', null) in ['owner', 'director', 'admin', 'editor', 'viewer', 'invitado']
-        && request.resource.data.get('status', null) in ['active', 'pending', 'archived'];
+        && canManageTargetMembership(resource.data.companyId)
+        && request.resource.data.get('role', null) in ['owner', 'director', 'admin', 'editor', 'viewer']
+        && request.resource.data.get('status', null) in ['active', 'pending', 'archived']
+        && canAssignCompanyRole(resource.data.companyId, request.resource.data.get('role', null));
 
       allow delete: if false;
     }
 
     match /auditLogs/{logId} {
-      allow read: if isAdmin() && hasCompanyId(resource.data) && sameCompany(resource.data.companyId);
+      allow read: if hasCompanyId(resource.data) && isAdminForCompany(resource.data.companyId);
       allow write: if false;
     }
 

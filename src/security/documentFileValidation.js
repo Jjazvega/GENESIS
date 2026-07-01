@@ -3,6 +3,8 @@ const ALLOWED_CONTENT_TYPES = new Set(['application/pdf', 'text/xml', 'applicati
 const MAX_DOCUMENT_SIZE_BYTES = 15 * 1024 * 1024;
 const PDF_MAGIC = '%PDF-';
 
+export const DOCUMENT_FILE_ACCEPT = '.pdf,.xml,application/pdf,text/xml,application/xml';
+
 export function getDocumentExtension(fileName = '') {
   return String(fileName || '').split('.').pop()?.toLowerCase() || '';
 }
@@ -37,6 +39,36 @@ export function validateDocumentFileMetadata(file) {
     fileType: ext,
     contentType: ext === 'xml' ? 'application/xml' : 'application/pdf',
   };
+}
+
+export function validateDocumentStoragePath(storagePath, { companyId, documentId } = {}) {
+  const safeStoragePath = String(storagePath || '').trim();
+  if (!safeStoragePath) {
+    throw new Error('No se puede usar el documento sin storagePath.');
+  }
+
+  if (/^https?:\/\//i.test(safeStoragePath)) {
+    throw new Error('Ruta de documento inválida. Usa storagePath interno, no URLs públicas.');
+  }
+
+  if (safeStoragePath.includes('..') || safeStoragePath.includes('\\')) {
+    throw new Error('Ruta de documento inválida. El storagePath contiene segmentos no permitidos.');
+  }
+
+  const parts = safeStoragePath.split('/');
+  if (parts.length < 5 || parts[0] !== 'companies' || parts[2] !== 'documents' || !parts[1] || !parts[3] || !parts.slice(4).join('/')) {
+    throw new Error('Ruta de documento inválida. Formato esperado: companies/{companyId}/documents/{documentId}/{archivo}.');
+  }
+
+  if (companyId && parts[1] !== String(companyId)) {
+    throw new Error('El storagePath no pertenece a la empresa activa.');
+  }
+
+  if (documentId && parts[3] !== String(documentId)) {
+    throw new Error('El storagePath no pertenece al documento seleccionado.');
+  }
+
+  return safeStoragePath;
 }
 
 async function readStart(file, length = 512) {

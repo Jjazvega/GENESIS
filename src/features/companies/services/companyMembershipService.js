@@ -3,7 +3,7 @@
 import { firebase } from '@/api/repoClient';
 
 const ACTIVE_STATUS = 'active';
-const DEFAULT_INITIAL_OWNER_ROLE = 'director';
+const DEFAULT_INITIAL_OWNER_ROLE = 'owner';
 
 function compareMembershipsByCreation(a, b) {
   return String(a?.createdAt || '').localeCompare(String(b?.createdAt || ''))

@@ -156,7 +156,12 @@ export async function seedCompany({ companyId, ownerUid, memberships = [] }) {
     claimsVersion: 1,
   }), 'admin company seed');
 
-  for (const membership of memberships) {
+  const seededMemberships = [
+    { userUid: ownerUid, role: 'owner', status: 'active' },
+    ...memberships.filter((membership) => membership.userUid !== ownerUid && membership.id !== `${companyId}_${ownerUid}`),
+  ];
+
+  for (const membership of seededMemberships) {
     const memberId = membership.id || `${companyId}_${membership.userUid || membership.userEmail}`;
     await assertAllowed(firestoreSet(`companyMembers/${memberId}`, {
       companyId,

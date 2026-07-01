@@ -14,6 +14,9 @@ import {
   syncUserProfile,
 } from '@/api/authClient';
 import { invokeLLM, invokeFunction, extractDataFromUploadedFile } from '@/api/aiClient';
+import { agents } from '@/api/agentClient';
+import { connectors } from '@/api/connectorClient';
+import { buildEntities, ENTITY_COLLECTIONS } from '@/api/entityClient';
 
 // ── Company creation (transactional, requires db access) ────────────────────
 
