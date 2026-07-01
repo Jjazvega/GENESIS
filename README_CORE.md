@@ -30,6 +30,7 @@ npm run dev
 - Menú desktop reducido al núcleo Core.
 - Menú móvil reducido al núcleo Core.
 - Eliminados módulos secundarios de navegación: CRM, ERP, RRHH, Operaciones, Predicción, Auditoría, Cliente, Soporte y Suscripciones como páginas principales.
+- Eliminados los restos técnicos en `src/features/crm`, `src/features/erp` y `src/features/operations`; no se archivan en el código porque no tienen rutas, imports ni propósito activo dentro del Core.
 - Eliminados backups de Dashboard dentro de src/pages.
 - Eliminada variable heredada VITE_LLM_ENDPOINT de .env.example.
 
