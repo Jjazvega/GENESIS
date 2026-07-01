@@ -13,10 +13,11 @@ import {
   logout,
   syncUserProfile,
 } from '@/api/authClient';
-import { invokeLLM, invokeFunction, extractDataFromUploadedFile } from '@/api/aiClient';
-import { agents } from '@/api/agentClient';
-import { connectors } from '@/api/connectorClient';
-import { buildEntities, ENTITY_COLLECTIONS } from '@/api/entityClient';
+import { invokeLLM, invokeFunction, extractDataFromUploadedFile, prepareDocumentUpload } from '@/api/aiClient';
+
+function nowIso() {
+  return new Date().toISOString();
+}
 
 // ── Company creation (transactional, requires db access) ────────────────────
 
@@ -143,6 +144,7 @@ export const firebase = {
   integrations: {
     Core: {
       InvokeLLM: invokeLLM,
+      PrepareDocumentUpload: prepareDocumentUpload,
       UploadFile: uploadFile,
       GetDocumentAccessUrl: getDocumentAccessUrl,
       ExtractDataFromUploadedFile: extractDataFromUploadedFile,

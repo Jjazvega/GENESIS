@@ -16,11 +16,6 @@ import ReactMarkdown from 'react-markdown';
 
 
 import { askLLM } from '@/modules/ai/aiService';
-const HIGH_COST_APPROVAL_THRESHOLD_USD = 0.25;
-
-function estimateRequestCostUsd(prompt, context) {
-  return ((String(prompt || '').length + String(context || '').length) / 1000) * 0.01;
-}
 
 const suggestedQueries = [
   '¿Cuál es el total de gastos en nómina este año?',
@@ -181,21 +176,6 @@ PREGUNTA DEL USUARIO:
 ${userQuery}
 
 Responde de forma profesional, concisa y con datos específicos. Usa formato markdown para mejor legibilidad.`;
-      const estimatedCostUsd = estimateRequestCostUsd(requestPrompt, docContext);
-
-      if (estimatedCostUsd > HIGH_COST_APPROVAL_THRESHOLD_USD) {
-        const approvalMessage = 'Solicitud pendiente de aprobación: el costo estimado supera $0.25 USD y requiere autorización de un supervisor.';
-        updateConversation(approvalMessage);
-        await saveConversation({
-          response: approvalMessage,
-          status: 'pendingApproval',
-          requiresSupervisorApproval: true,
-        }).catch((persistenceError) => {
-          console.error(`No se pudo persistir la conversación IA pendiente (correlationId: ${correlationId}):`, persistenceError);
-        });
-        return;
-      }
-
       const aiResponse = await askLLM({
         companyId: activeCompany.id,
         prompt: requestPrompt,
@@ -207,8 +187,19 @@ Responde de forma profesional, concisa y con datos específicos. Usa formato mar
 
       await saveConversation({
         response,
-      }).catch((persistenceError) => {
-        console.error(`No se pudo persistir la conversación IA completada (correlationId: ${correlationId}):`, persistenceError);
+        estimatedCostUsd: aiResponse?.estimatedCostUsd || aiResponse?.costUsd || aiResponse?.costo || 0,
+        usageLog: {
+          tokens: aiResponse?.tokens,
+          model: aiResponse?.model,
+          costo: aiResponse?.costo,
+          costUsd: aiResponse?.costUsd,
+          costLogTimestamp: aiResponse?.costLogTimestamp,
+        },
+      });
+
+      await logAction({
+        companyId: activeCompany.id, userEmail: user?.email, userName: user?.fullName,
+        action: 'ai_query', entityType: 'AIConversation', details: `Consulta IA completada (longitud: ${userQuery.length}, documentos: ${docIds.length})`, correlationId: aiResponse?.correlationId || correlationId
       });
     } catch (error) {
       const errorMessage = getErrorMessage(error, 'Verifica la configuración del backend seguro y vuelve a intentar.');

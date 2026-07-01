@@ -7,6 +7,7 @@ const { enforceAiLimits } = require('../limits/enforceAiLimits');
 const { reconcileAiReservation } = require('../limits/reconcileAiReservation');
 const { writeAiAuditLog, writeAiCostLog } = require('../audit/writeAiAuditLog');
 const { askLLM } = require('../providers/openaiProvider');
+const { composeAiPrompt } = require('../context/composeAiContext');
 const { MAX_CORRELATION_ID_LENGTH, MAX_PROMPT_LENGTH, RELEASE_METADATA, getAiLimitConfig, getLlmModel, getLlmProvider } = require('../shared/config');
 const { createCorrelationId, structuredLog } = require('../shared/logging');
 const { calculateCostUsd, estimateTokenCount, getUsageTokens } = require('../shared/usage');
@@ -53,16 +54,17 @@ async function aiHandler(req, res) {
     user = await verifyFirebaseUser(req);
     const prompt = getPrompt(req.body);
     authorization = await authorizeAiRequest({ user, body: req.body || {} });
-    reservation = await enforceAiLimits({ user, authorization, prompt, correlationId });
+    const serverPrompt = composeAiPrompt({ prompt, authorization });
+    reservation = await enforceAiLimits({ user, authorization, prompt: serverPrompt, correlationId });
     providerName = getLlmProvider(); modelName = getLlmModel(providerName);
     const requestMetadata = { requestedDocumentCount: authorization.documents.length, promptLength: prompt.length, estimatedTokens: reservation.estimatedTokens, estimatedCostUsd: Number(reservation.estimatedCostUsd.toFixed(8)) };
     await writeAiAuditLog({ eventName: 'ai_request_started', status: 102, user, authorization, correlationId, provider: providerName, model: modelName, requestMetadata });
     structuredLog('INFO', 'ai_request_started', { correlationId, firebaseUid: user.uid || 'unknown', companyId: authorization.companyId, role: authorization.role, ...requestMetadata, provider: providerName, model: modelName });
-    const { outputText, provider, model, usage } = await askLLM({ prompt, user, authorization, correlationId });
+    const { outputText, provider, model, usage } = await askLLM({ prompt: serverPrompt, user, authorization, correlationId });
     const reconciliation = await reconcileAiReservation({ user, authorization, reservation, status: 'completed', usage, provider, model, correlationId });
     await writeAiCostLog({ user, authorization, correlationId, integration: req.body?.integration || provider, provider, model, usage, estimatedTokens: reservation.estimatedTokens, estimatedCostUsd: reservation.estimatedCostUsd });
     await writeAiAuditLog({ eventName: 'ai_request_completed', status: 200, user, authorization, correlationId, provider, model, requestMetadata });
-    res.status(200).json({ response: outputText, provider, model, tokens: reconciliation.tokens, costo: reconciliation.costo, costUsd: reconciliation.costUsd, status: 'completed', correlationId, ...(authorization?.companyId ? { companyId: authorization.companyId } : {}), release: RELEASE_METADATA });
+    res.status(200).json({ response: outputText, provider, model, tokens: reconciliation.tokens, costo: reconciliation.costo, costUsd: reconciliation.costUsd, estimatedCostUsd: Number(reservation.estimatedCostUsd.toFixed(8)), status: 'completed', correlationId, ...(authorization?.companyId ? { companyId: authorization.companyId } : {}), release: RELEASE_METADATA });
     structuredLog('INFO', 'ai_request_completed', { correlationId, firebaseUid: user.uid || 'unknown', companyId: authorization.companyId, status: 200, latencyMs: Date.now() - startedAt });
   } catch (error) {
     const status = Number(error.status) || 500;

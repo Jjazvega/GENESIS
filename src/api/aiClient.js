@@ -238,6 +238,18 @@ export async function invokeFunction(name, payload = {}) {
   return { data };
 }
 
+// ── Document upload preparation (server-side validation and path reservation) ─
+
+export async function prepareDocumentUpload(params = {}) {
+  const correlationId = ensureCorrelationId(params.correlationId, 'doc_upload');
+  const result = await invokeFunction('prepareDocumentUpload', {
+    ...params,
+    correlationId,
+    release: getReleaseMetadata(),
+  });
+  return result.data;
+}
+
 // ── Stub: file data extraction (requires secure backend) ─────────────────────
 
 export async function extractDataFromUploadedFile() {
