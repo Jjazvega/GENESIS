@@ -1,7 +1,9 @@
 const { syncCompanyClaimsHandler } = require('./syncCompanyClaimsHandler');
+const { prepareDocumentUploadHandler } = require('../services/documents/prepareDocumentUpload');
 
 const FUNCTION_HANDLERS = new Map([
   ['syncCompanyClaims', syncCompanyClaimsHandler],
+  ['prepareDocumentUpload', prepareDocumentUploadHandler],
 ]);
 
 function getFunctionNameFromRequest(req) {

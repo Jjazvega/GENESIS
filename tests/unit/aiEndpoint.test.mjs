@@ -498,6 +498,82 @@ describe('endpoint IA', () => {
     assert.equal(reservation.reservationStatus, 'reserved');
   });
 
+
+
+  it('bloquea solicitudes de alto costo sin rol aprobador antes de llamar a OpenAI', async () => {
+    process.env.AI_COST_PER_1K_TOKENS_USD = '1';
+    process.env.AI_HIGH_COST_APPROVAL_USD = '0.25';
+    let openAiCalls = 0;
+
+    const store = seedBase();
+    store.set('companyMembers/memberCompany_editorUid', { companyId: 'memberCompany', userUid: 'editorUid', status: 'active', role: 'editor' });
+    const res = await exercise({
+      store,
+      uid: 'editorUid',
+      body: { companyId: 'memberCompany', prompt: 'Hola' },
+      fetchImpl: async () => {
+        openAiCalls += 1;
+        return { ok: true, status: 200, async json() { return { output_text: 'No debe llamarse' }; } };
+      },
+    });
+
+    assert.equal(res.statusCode, 403);
+    assert.match(res.payload.error, /pendiente de aprobación/);
+    assert.equal(openAiCalls, 0);
+  });
+
+  it('bloquea por presupuesto backend aiBudgets antes de llamar a OpenAI', async () => {
+    const store = seedBase();
+    store.set('aiBudgets/validCompany', { companyId: 'validCompany', dailyBudgetUsd: 0.000001 });
+    let openAiCalls = 0;
+
+    const res = await exercise({
+      store,
+      body: { companyId: 'validCompany', prompt: 'Hola' },
+      fetchImpl: async () => {
+        openAiCalls += 1;
+        return { ok: true, status: 200, async json() { return { output_text: 'No debe llamarse' }; } };
+      },
+    });
+
+    assert.equal(res.statusCode, 429);
+    assert.match(res.payload.error, /Presupuesto diario IA configurado/);
+    assert.equal(openAiCalls, 0);
+  });
+
+  it('bloquea patrones repetitivos por controles antifraude backend antes de llamar a OpenAI', async () => {
+    process.env.AI_REPEATED_PROMPT_THRESHOLD = '5';
+    const store = seedBase();
+    const nowMs = Date.now();
+    const fingerprint = (await loadAiEndpoint({
+      store,
+      verifyIdToken: async () => ({ uid: 'owner-uid' }),
+      fetchImpl: async () => ({ ok: true, status: 200, async json() { return { output_text: 'ok' }; } }),
+      exportName: 'normalizePromptFingerprint',
+    }))('Contexto server-side validado por GEMAILLA:\nEmpresa validada: validCompany\nRol validado: owner\nDocumentos validados: 0\n\nSolicitud del usuario:\nHola');
+    store.set('aiFraudControls/validCompany_owner-uid', {
+      companyId: 'validCompany',
+      userUid: 'owner-uid',
+      lastPromptFingerprint: fingerprint,
+      repeatedPromptCount: 4,
+      windowStartedAtMs: nowMs,
+    });
+    let openAiCalls = 0;
+
+    const res = await exercise({
+      store,
+      body: { companyId: 'validCompany', prompt: 'Hola' },
+      fetchImpl: async () => {
+        openAiCalls += 1;
+        return { ok: true, status: 200, async json() { return { output_text: 'No debe llamarse' }; } };
+      },
+    });
+
+    assert.equal(res.statusCode, 429);
+    assert.match(res.payload.error, /patrón repetitivo/);
+    assert.equal(openAiCalls, 0);
+  });
+
   it('bloquea por rate limiting antes de llamar a OpenAI', async () => {
     process.env.AI_RATE_LIMIT_MAX_REQUESTS = '1';
     const store = seedBase({ aiRateLimits: { 'validCompany_owner-uid': { windowStartedAtMs: Date.now(), requestCount: 1 } } });

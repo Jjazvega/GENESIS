@@ -3,6 +3,7 @@ const { fail } = require('../../../policies/httpPolicy');
 const { getAiLimitConfig } = require('../shared/config');
 const { estimateTokenCount, getUtcDateKey, toCounterNumber } = require('../shared/usage');
 const { structuredLog } = require('../shared/logging');
+const { enforceAiRiskControls } = require('./enforceAiRiskControls');
 
 function getLimitDocIds({ companyId, uid, now = new Date() }) {
   const safeUid = String(uid || 'unknown').replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 160) || 'unknown';
@@ -35,6 +36,7 @@ async function enforceAiLimits({ user, authorization, prompt, correlationId, now
     const usedBudgetUsd = toCounterNumber(usageData.reservedBudgetUsd) + toCounterNumber(usageData.budgetUsedUsd);
     if (usedTokens + estimatedTokens > config.dailyTokenLimit) fail(429, 'Cuota diaria de tokens IA excedida para esta empresa.');
     if (usedBudgetUsd + estimatedCostUsd > config.dailyBudgetUsd) fail(429, 'Presupuesto diario de IA excedido para esta empresa.');
+    await enforceAiRiskControls({ transaction, db, user, authorization, prompt, usageRef, usageData, estimatedTokens, estimatedCostUsd, correlationId, now });
     transaction.set(rateRef, { companyId: authorization.companyId, userUid: user.uid || 'unknown', windowStartedAtMs: windowExpired ? nowMs : windowStartedAtMs, requestCount: nextRequestCount, updatedAtMs: nowMs }, { merge: true });
     transaction.set(usageRef, { companyId: authorization.companyId, dateKey: getUtcDateKey(now), reservedTokens: Math.max(0, toCounterNumber(usageData.reservedTokens) + estimatedTokens), reservedBudgetUsd: Number(Math.max(0, toCounterNumber(usageData.reservedBudgetUsd) + estimatedCostUsd).toFixed(8)), requestCount: toCounterNumber(usageData.requestCount) + 1, updatedAtMs: nowMs }, { merge: true });
   });

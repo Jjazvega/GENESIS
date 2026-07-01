@@ -158,6 +158,16 @@ export async function invokeLLM(params = {}) {
   return { response: result, correlationId };
 }
 
+
+export async function prepareDocumentUpload(params = {}) {
+  const correlationId = ensureCorrelationId(params.correlationId, 'doc_upload');
+  return (await invokeFunction('prepareDocumentUpload', {
+    ...params,
+    correlationId,
+    release: getReleaseMetadata(),
+  })).data;
+}
+
 async function extractDataFromUploadedFile() {
   return {
     status: 'disabled',
@@ -373,6 +383,7 @@ export const firebase = {
   integrations: {
     Core: {
       InvokeLLM: invokeLLM,
+      PrepareDocumentUpload: prepareDocumentUpload,
       UploadFile: uploadFile,
       GetDocumentAccessUrl: getDocumentAccessUrl,
       ExtractDataFromUploadedFile: extractDataFromUploadedFile,

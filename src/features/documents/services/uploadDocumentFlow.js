@@ -22,16 +22,28 @@ export async function uploadDocumentFlow({ file, company, user, correlationId: p
   const { fileType, contentType } = await validateDocumentFileContent(file);
   const documentId = firebase.entities.Document.newId();
 
-  const doc = await firebase.entities.Document.createWithId(documentId, {
+  const prepared = await firebase.integrations.Core.PrepareDocumentUpload({
     companyId: company.id,
-    title: file.name,
+    documentId,
+    fileName: file.name,
     contentType,
     fileSize: file.size,
     fileType,
-    status: DOCUMENT_STATUSES.UPLOADING,
+    correlationId,
+  });
+
+  const doc = {
+    id: documentId,
+    companyId: prepared.companyId || company.id,
+    title: prepared.fileName || file.name,
+    contentType: prepared.contentType || contentType,
+    fileSize: prepared.fileSize || file.size,
+    fileType: prepared.fileType || fileType,
+    status: prepared.status || DOCUMENT_STATUSES.UPLOADING,
+    storagePath: prepared.storagePath,
     correlationId,
     release: getReleaseMetadata(),
-  });
+  };
 
   try {
     const uploaded = await firebase.integrations.Core.UploadFile({

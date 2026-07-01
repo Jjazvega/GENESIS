@@ -17,11 +17,6 @@ import ReactMarkdown from 'react-markdown';
 
 
 import { askLLM } from '@/modules/ai/aiService';
-const HIGH_COST_APPROVAL_THRESHOLD_USD = 0.25;
-
-function estimateRequestCostUsd(prompt, context) {
-  return ((String(prompt || '').length + String(context || '').length) / 1000) * 0.01;
-}
 
 const suggestedQueries = [
   '¿Cuál es el total de gastos en nómina este año?',
@@ -187,15 +182,6 @@ PREGUNTA DEL USUARIO:
 ${userQuery}
 
 Responde de forma profesional, concisa y con datos específicos. Usa formato markdown para mejor legibilidad.`;
-      const estimatedCostUsd = estimateRequestCostUsd(requestPrompt, docContext);
-
-      if (estimatedCostUsd > HIGH_COST_APPROVAL_THRESHOLD_USD) {
-        const approvalMessage = 'Solicitud pendiente de aprobación: el costo estimado supera $0.25 USD y requiere autorización de un supervisor.';
-        updateConversation(approvalMessage);
-        await saveConversation({ response: approvalMessage, status: 'pendingApproval', estimatedCostUsd });
-        return;
-      }
-
       const aiResponse = await askLLM({
         companyId: activeCompany.id,
         prompt: requestPrompt,
@@ -207,7 +193,7 @@ Responde de forma profesional, concisa y con datos específicos. Usa formato mar
 
       await saveConversation({
         response,
-        estimatedCostUsd,
+        estimatedCostUsd: aiResponse?.estimatedCostUsd || aiResponse?.costUsd || aiResponse?.costo || 0,
         usageLog: {
           tokens: aiResponse?.tokens,
           model: aiResponse?.model,
