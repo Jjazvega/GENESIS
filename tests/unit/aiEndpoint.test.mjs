@@ -349,6 +349,13 @@ describe('endpoint IA', () => {
     assert.match(res.payload.error, /companyId es obligatorio/);
   });
 
+  it('responde 413 cuando el prompt excede el límite permitido', async () => {
+    const res = await exercise({ body: { companyId: 'validCompany', prompt: 'x'.repeat(12001) } });
+
+    assert.equal(res.statusCode, 413);
+    assert.match(res.payload.error, /excede el límite/);
+  });
+
   it('responde 403 cuando la empresa no existe', async () => {
     const res = await exercise({ body: { companyId: 'missingCompany', prompt: 'Hola' } });
 
@@ -375,6 +382,19 @@ describe('endpoint IA', () => {
 
     assert.equal(res.statusCode, 403);
     assert.match(res.payload.error, /no pertenece a la empresa validada/);
+  });
+
+  it('responde 400 cuando se solicitan demasiados documentos', async () => {
+    const res = await exercise({
+      body: {
+        companyId: 'validCompany',
+        prompt: 'Analiza documento',
+        documentIds: Array.from({ length: 26 }, (_, index) => `doc-${index}`),
+      },
+    });
+
+    assert.equal(res.statusCode, 400);
+    assert.match(res.payload.error, /No se pueden solicitar más de 25 documentos/);
   });
 
   it('responde 200 en el caso válido y registra costo de IA', async () => {

@@ -24,18 +24,18 @@ describe('repoClient: controles de seguridad de empresa y conversaciones', () =>
     assert.match(repoClientSource, /userUid,/);
   });
 
-  it('agents.addMessage exige conversación existente, ownerUid propio y companyId antes de invocar IA', () => {
-    assert.match(repoClientSource, /if \(!snap\.exists\(\)\) throw new Error\('Conversación no encontrada o sin acceso\.'\);/);
-    assert.match(repoClientSource, /if \(!currentUid\) throw new Error\('Debes iniciar sesión para enviar mensajes\.'\);/);
-    assert.match(repoClientSource, /current\.ownerUid && current\.ownerUid !== currentUid/);
-    assert.match(repoClientSource, /No puedes enviar mensajes en conversaciones de otro usuario/);
-    assert.match(repoClientSource, /if \(!current\.companyId\) throw new Error\('La conversación no tiene companyId válido\.'\);/);
+  it('agents.addMessage delega la validación y persistencia de IA al backend seguro', () => {
+    assert.match(repoClientSource, /companyId es obligatorio para enviar mensajes de IA mediante el backend seguro/);
+    assert.match(repoClientSource, /invokeFunction\('appendAiConversationMessage'/);
+    assert.doesNotMatch(repoClientSource, /getDoc\(refDoc\)/);
+    assert.doesNotMatch(repoClientSource, /mutations\.update\(refDoc,\s*\{\s*messages/);
   });
 
-  it('createConversation guarda companyId obligatorio en aiConversations', () => {
+  it('createConversation enruta companyId obligatorio al backend seguro', () => {
     assert.match(repoClientSource, /companyId es obligatorio para crear conversaciones de IA/);
+    assert.match(repoClientSource, /invokeFunction\('createAiConversation'/);
     assert.match(repoClientSource, /companyId: safeCompanyId/);
-    assert.match(repoClientSource, /collection\(db, 'aiConversations'\)/);
+    assert.doesNotMatch(repoClientSource, /collection\(db, 'aiConversations'\)/);
   });
 });
 

@@ -5,10 +5,8 @@ import { createCorrelationId } from '@/lib/observability';
 import { useCompanyAiConversations } from '@/lib/companyEntityQueries';
 import { useCompanyData } from '@/hooks/useCompanyData';
 import { useCompany } from '@/lib/companyContext';
-import { useAuth } from '@/lib/AuthContext';
 import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
-import { logAction } from '@/lib/auditLogger';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -62,7 +60,6 @@ const createPendingConversationId = () => {
 
 export default function AIAssistant() {
   const { activeCompany } = useCompany();
-  const { user } = useAuth();
   const [query, setQuery] = useState('');
   const [filterDocType, setFilterDocType] = useState('all');
   const [loading, setLoading] = useState(false);
@@ -141,20 +138,16 @@ export default function AIAssistant() {
       )));
     };
 
-    const saveConversation = async ({ response, status = 'completed', errorMessage = null, estimatedCostUsd = 0, usageLog = null }) => {
-      await firebase.entities.AIConversation.create({
+    const saveConversation = async ({ response, status = 'completed', errorMessage = null, requiresSupervisorApproval = false }) => {
+      await firebase.functions.invoke('createAiConversation', {
         companyId: activeCompany.id,
-        userEmail: user?.email || '',
         query: userQuery,
         response,
-        context_documents: docIds,
-        filters_used: { docType: filterDocType },
+        contextDocumentIds: docIds,
+        filtersUsed: { docType: filterDocType },
         status,
-        estimatedCostUsd,
-        ...(usageLog ? { tokens: usageLog.tokens, model: usageLog.model, costo: usageLog.costo, costUsd: usageLog.costUsd, costLogTimestamp: usageLog.costLogTimestamp } : {}),
-        requiresSupervisorApproval: status === 'pendingApproval',
+        requiresSupervisorApproval,
         errorMessage,
-        documentIds: docIds,
         correlationId,
       });
     };
@@ -193,7 +186,13 @@ Responde de forma profesional, concisa y con datos específicos. Usa formato mar
       if (estimatedCostUsd > HIGH_COST_APPROVAL_THRESHOLD_USD) {
         const approvalMessage = 'Solicitud pendiente de aprobación: el costo estimado supera $0.25 USD y requiere autorización de un supervisor.';
         updateConversation(approvalMessage);
-        await saveConversation({ response: approvalMessage, status: 'pendingApproval', estimatedCostUsd });
+        await saveConversation({
+          response: approvalMessage,
+          status: 'pendingApproval',
+          requiresSupervisorApproval: true,
+        }).catch((persistenceError) => {
+          console.error(`No se pudo persistir la conversación IA pendiente (correlationId: ${correlationId}):`, persistenceError);
+        });
         return;
       }
 
@@ -208,39 +207,17 @@ Responde de forma profesional, concisa y con datos específicos. Usa formato mar
 
       await saveConversation({
         response,
-        estimatedCostUsd,
-        usageLog: {
-          tokens: aiResponse?.tokens,
-          model: aiResponse?.model,
-          costo: aiResponse?.costo,
-          costUsd: aiResponse?.costUsd,
-          costLogTimestamp: aiResponse?.costLogTimestamp,
-        },
-      });
-
-      await logAction({
-        companyId: activeCompany.id, userEmail: user?.email, userName: user?.fullName,
-        action: 'ai_query', entityType: 'AIConversation', details: `Consulta IA completada (longitud: ${userQuery.length}, documentos: ${docIds.length})`, correlationId: aiResponse?.correlationId || correlationId
+      }).catch((persistenceError) => {
+        console.error(`No se pudo persistir la conversación IA completada (correlationId: ${correlationId}):`, persistenceError);
       });
     } catch (error) {
       const errorMessage = getErrorMessage(error, 'Verifica la configuración del backend seguro y vuelve a intentar.');
       const response = `No se pudo completar la consulta de IA. ${errorMessage}`;
       updateConversation(response);
 
-      try {
-        await saveConversation({ response, status: 'error', errorMessage });
-        await logAction({
-          companyId: activeCompany.id,
-          userEmail: user?.email,
-          userName: user?.fullName,
-          action: 'ai_query_error',
-          entityType: 'AIConversation',
-          details: `Consulta IA fallida (longitud: ${userQuery.length}, documentos: ${docIds.length}) — ${errorMessage}`,
-          correlationId,
-        });
-      } catch (persistenceError) {
+      await saveConversation({ response, status: 'error', errorMessage }).catch((persistenceError) => {
         console.error('Error persisting failed AI conversation:', persistenceError);
-      }
+      });
     } finally {
       loadingRef.current = false;
       if (isMountedRef.current) {
