@@ -16,7 +16,7 @@ export default function ProtectedRoute() {
   if (authError) return <AuthErrorPage message={authError.message} />;
 
   if (!isAuthenticated) {
-    return <Navigate to="/" replace state={{ from: location }} />;
+    return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
   return (
