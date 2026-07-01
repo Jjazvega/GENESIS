@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { CompanyProvider } from '@/lib/companyContext';
+import { Navigate } from 'react-router-dom';
 
 // Rutas limpias GEMAILLA Core: Empresas + Documentos + Finanzas + IA.
 const ModuleLoader = (Component) => (
@@ -19,19 +19,16 @@ const Companies = lazy(() => import('@/modules/companies/pages/CompaniesPage'));
 const Documents = lazy(() => import('@/modules/documents/pages/DocumentsPage'));
 const FinancialHub = lazy(() => import('@/pages/FinancialHub'));
 const AIAssistant = lazy(() => import('@/pages/AIAssistant'));
+const Login = lazy(() => import('@/modules/auth/pages/LoginPage'));
+const Register = lazy(() => import('@/modules/auth/pages/RegisterPage'));
 
 export const publicRoutes = [
-  {
-    path: '/',
-    element: (
-      <CompanyProvider>
-        {ModuleLoader(Dashboard)}
-      </CompanyProvider>
-    ),
-  },
+  { path: '/login', element: ModuleLoader(Login) },
+  { path: '/register', element: ModuleLoader(Register) },
 ];
 
 export const appRoutes = [
+  { path: '/', element: <Navigate to="/dashboard" replace /> },
   { path: '/dashboard', element: ModuleLoader(Dashboard) },
   { path: '/companies', element: ModuleLoader(Companies) },
   { path: '/documents', element: ModuleLoader(Documents) },

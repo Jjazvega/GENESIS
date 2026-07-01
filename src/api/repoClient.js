@@ -1,4 +1,4 @@
-import { auth, db } from '@/firebase';
+import { db } from '@/firebase';
 import { collection, doc, onSnapshot, runTransaction } from 'firebase/firestore';
 import { ENTITY_COLLECTIONS } from '@/infrastructure/firebase/repositories/entityCollections';
 import { normalizeData } from '@/infrastructure/firebase/repositories/normalization';
