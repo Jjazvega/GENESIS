@@ -26,7 +26,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { firebase } from '@/api/firebaseClient';
+import { firebase } from '@/api/repoClient';
 
 const GOLD = '#f6c84a';
 

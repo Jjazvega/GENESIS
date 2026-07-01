@@ -5,9 +5,16 @@ import { execFileSync } from 'node:child_process';
 
 const ROOT = resolve('.');
 const SOURCE_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs']);
+// Files permitted to import directly from Firebase SDKs or @/firebase.
+// All domain-specific API clients live in src/api/ and are explicitly
+// listed here so that any new file added to src/api/ must be intentionally
+// approved rather than implicitly allowed.
 const ALLOWED_FIREBASE_IMPORT_FILES = new Set([
   'src/firebase.js',
-  'src/api/firebaseClient.js',
+  'src/api/firebaseClient.js', // re-exports primitives only
+  'src/api/authClient.js',     // auth + user-profile mutations
+  'src/api/aiClient.js',       // AI HTTP calls (auth token read-only)
+  'src/api/repoClient.js',     // entity repositories and agents
 ]);
 const PUBLIC_VITE_ALLOWLIST = new Set([
   'VITE_FIREBASE_API_KEY',
@@ -144,6 +151,57 @@ function validateFirestoreIndexes(issues, options) {
   }
 }
 
+function validateAiClientDbIsolation(issues) {
+  const aiClientPath = resolve(ROOT, 'src/api/aiClient.js');
+  if (!existsSync(aiClientPath)) return;
+  const source = readFileSync(aiClientPath, 'utf8');
+
+  // Strip single-line comments before checking to avoid false positives
+  const stripped = source.split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
+
+  // Check destructured imports: import { db, ... } from '@/firebase'
+  const destructuredMatch = stripped.match(/import\s*\{([^}]+)\}\s*from\s*['"]@\/firebase['"]/);
+  const hasDestructuredDb = destructuredMatch && /\bdb\b/.test(destructuredMatch[1]);
+
+  // Check namespace imports: import * as X from '@/firebase' (indirect access to db)
+  const hasNamespaceImport = /import\s*\*\s*as\s+\w+\s*from\s*['"]@\/firebase['"]/.test(stripped);
+
+  // Check default imports: import firebase from '@/firebase' (indirect access to db)
+  const hasDefaultImport = /import\s+[a-zA-Z_$][\w$]*\s*from\s*['"]@\/firebase['"]/.test(stripped);
+
+  if (hasDestructuredDb || hasNamespaceImport || hasDefaultImport) {
+    addIssue(
+      issues,
+      'ai-client-isolation',
+      'src/api/aiClient.js',
+      'aiClient.js no debe importar db de @/firebase. El cliente de IA solo tiene acceso de lectura a auth (tokens de identidad), no a Firestore.',
+    );
+  }
+}
+
+function validateFirebaseClientPrimitivesOnly(issues) {
+  const clientPath = resolve(ROOT, 'src/api/firebaseClient.js');
+  if (!existsSync(clientPath)) return;
+  const source = readFileSync(clientPath, 'utf8');
+
+  // Strip comment-only lines to avoid false positives from commented examples
+  const codeLines = source.split('\n').filter((line) => !line.trim().startsWith('//'));
+  const codeOnly = codeLines.join('\n');
+
+  // Check for actual function/class declarations (not just the word appearing as part of other code)
+  const hasFunctionDecl = /\b(?:export\s+)?(?:async\s+)?function\s+[a-zA-Z_$][\w$]*\s*\(/.test(codeOnly);
+  const hasClassDecl = /\bclass\s+[a-zA-Z_$][\w$]*/.test(codeOnly);
+
+  if (hasFunctionDecl || hasClassDecl) {
+    addIssue(
+      issues,
+      'firebase-client-primitives',
+      'src/api/firebaseClient.js',
+      'firebaseClient.js solo debe re-exportar primitivas de Firebase (app, db, auth, storage). Mueve la lógica de negocio a authClient.js, aiClient.js o repoClient.js.',
+    );
+  }
+}
+
 function parseArgs(argv) {
   const options = { project: process.env.FIREBASE_PROJECT_ID || '' };
   for (const arg of argv) {
@@ -159,6 +217,8 @@ function main() {
   validateFirebaseImports(issues);
   validateFeatureCompanyGuards(issues);
   validateSensitiveViteVariables(issues);
+  validateAiClientDbIsolation(issues);
+  validateFirebaseClientPrimitivesOnly(issues);
   validateFirestoreIndexes(issues, options);
 
   if (issues.length > 0) {
@@ -168,7 +228,7 @@ function main() {
   }
 
   const remoteText = options.project ? ` e índices remotos del proyecto ${options.project}` : ' (índices remotos omitidos; usa --project=<id> en CI con credenciales)';
-  console.log(`✅ Arquitectura validada: imports Firebase, guards company.id, VITE sensibles e índices Firestore${remoteText}.`);
+  console.log(`✅ Arquitectura validada: imports Firebase, guards company.id, VITE sensibles, aislamiento aiClient, primitivas firebaseClient e índices Firestore${remoteText}.`);
 }
 
 main();

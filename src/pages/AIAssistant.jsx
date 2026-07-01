@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { firebase, isAiDisabledResponse } from '@/api/firebaseClient';
+import { firebase } from '@/api/repoClient';
+import { isAiDisabledResponse } from '@/api/aiClient';
 import { createCorrelationId } from '@/lib/observability';
 import { useCompanyAiConversations } from '@/lib/companyEntityQueries';
 import { useCompanyData } from '@/hooks/useCompanyData';

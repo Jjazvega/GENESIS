@@ -1,4 +1,4 @@
-import firebase from '@/api/firebaseClient';
+import firebase from '@/api/repoClient';
 import { ensureCorrelationId, getReleaseMetadata } from '@/lib/observability';
 
 export async function logAction({ companyId, userEmail, userName, action, entityType, entityId, details, correlationId }) {
