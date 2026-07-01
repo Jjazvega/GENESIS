@@ -3,6 +3,39 @@ import { auth } from '@/firebase';
 import { DOCUMENT_STATUSES, AI_DISABLED_RESPONSE_STATUSES } from '@/features/documents/constants/documentStatuses';
 import { ensureCorrelationId, getReleaseMetadata, logFrontendEvent, persistObservabilityEvent } from '@/lib/observability';
 
+
+/**
+ * @typedef {Object} AiHttpRequestBody
+ * @property {string} companyId Empresa activa autorizada por el backend.
+ * @property {string} prompt Prompt final que el frontend manda a POST /api/ai.
+ * @property {string[]=} documentIds IDs de documentos; el backend revalida pertenencia a la empresa.
+ * @property {string[]=} storagePaths Rutas de Storage; el backend revalida pertenencia a la empresa.
+ * @property {string=} correlationId ID trazable enviado también en X-Correlation-Id.
+ * @property {Record<string, unknown>=} response_json_schema Esquema opcional para salida estructurada.
+ * @property {string=} integration Etiqueta para auditoría y costos.
+ * @property {Record<string, unknown>=} release Metadata de versión del frontend.
+ *
+ * @typedef {Object} AiHttpSuccessResponse
+ * @property {'completed'} status Estado final del backend.
+ * @property {string} response Texto generado por IA.
+ * @property {string} provider Proveedor LLM usado.
+ * @property {string} model Modelo usado.
+ * @property {number} tokens Tokens reales reportados por el proveedor y debitados en aiUsage.tokensUsed.
+ * @property {number} costUsd Costo real debitado en aiUsage.budgetUsedUsd.
+ * @property {number} costo Alias legado de costUsd.
+ * @property {number} estimatedCostUsd Costo estimado reservado para controlar presupuesto diario antes del LLM.
+ * @property {string} correlationId ID de trazabilidad.
+ * @property {string=} companyId Empresa autorizada.
+ * @property {Record<string, unknown>} release Metadata de versión del backend.
+ *
+ * @typedef {Object} AiHttpErrorResponse
+ * @property {string} error Mensaje seguro de error.
+ * @property {string} correlationId ID de trazabilidad.
+ * @property {'CORS_FORBIDDEN'|'AUTH_REQUIRED'|'AUTH_INVALID'|'AI_PERMISSION_DENIED'|'AI_QUOTA_EXCEEDED'|'AI_BAD_REQUEST'|'AI_INTERNAL_ERROR'=} code Código estable.
+ * @property {'cors'|'auth'|'permission'|'quota'|'validation'|'server'=} type Tipo estable. Un HTTP 403 con type='cors' significa origen no permitido; con type='permission' significa usuario/rol/empresa sin permiso.
+ * @property {Record<string, unknown>=} release Metadata de versión del backend.
+ */
+
 // ── Zod input schemas (zero-trust validation) ────────────────────────────────
 
 const MAX_PROMPT_LENGTH = 12000;
@@ -126,6 +159,7 @@ export function getSafeAiEndpoint() {
   return getSafeInternalEndpoint(defaultEndpoint, '/api/ai', 'ia');
 }
 
+/** @returns {AiHttpRequestBody} */
 function shapeInvokeLlmPayload(data, correlationId) {
   return {
     companyId: data.companyId,
@@ -149,6 +183,12 @@ function shapeInvokeFunctionPayload(payload = {}, correlationId) {
 
 // ── AI LLM call (no database mutation access) ────────────────────────────────
 
+/**
+ * Ejecuta explícitamente una petición HTTP POST /api/ai.
+ * Secuencia visible: valida datos, obtiene token Firebase, construye body, llama fetch, lee texto, parsea JSON, distingue éxito/error.
+ * @param {AiHttpRequestBody} params
+ * @returns {Promise<AiHttpSuccessResponse>}
+ */
 export async function invokeLLM(params = {}) {
   const parsed = InvokeLLMSchema.safeParse(params);
   if (!parsed.success) {
@@ -157,15 +197,21 @@ export async function invokeLLM(params = {}) {
 
   const correlationId = ensureCorrelationId(parsed.data.correlationId, 'ai');
   const endpoint = getSafeAiEndpoint();
-  const response = await fetch(endpoint, {
+  const httpRequestBody = shapeInvokeLlmPayload(parsed.data, correlationId);
+  const authHeader = await getAuthHeader();
+  const httpRequest = {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'X-Correlation-Id': correlationId,
-      ...(await getAuthHeader()),
+      ...authHeader,
     },
-    body: JSON.stringify(shapeInvokeLlmPayload(parsed.data, correlationId)),
-  });
+    body: JSON.stringify(httpRequestBody),
+  };
+
+  logFrontendEvent('ai_http_request_started', { correlationId, endpoint, method: httpRequest.method });
+  const response = await fetch(endpoint, httpRequest);
+  logFrontendEvent('ai_http_response_received', { correlationId, status: response.status, ok: response.ok });
 
   const raw = await response.text();
   let payload = {};
@@ -178,8 +224,10 @@ export async function invokeLLM(params = {}) {
   }
 
   if (!response.ok) {
+    const errorType = payload?.type || (response.status === 403 ? 'permission' : 'server');
+    const errorCode = payload?.code || (response.status === 403 ? 'AI_PERMISSION_DENIED' : 'AI_INTERNAL_ERROR');
     const message = payload?.error || payload?.message || `Error HTTP ${response.status} al llamar IA.`;
-    logFrontendEvent('ai_request_failed', { correlationId, status: response.status, message }, 'error');
+    logFrontendEvent('ai_request_failed', { correlationId, status: response.status, errorType, errorCode, message }, 'error');
     await persistObservabilityEvent('ai_request_failed', {
       correlationId,
       severity: 'ERROR',
@@ -187,7 +235,12 @@ export async function invokeLLM(params = {}) {
       status: response.status,
       message,
     }).catch(() => null);
-    throw new Error(`${message} (correlationId: ${correlationId})`);
+    const error = new Error(`${message} (correlationId: ${correlationId})`);
+    error.status = response.status;
+    error.code = errorCode;
+    error.type = errorType;
+    error.payload = payload;
+    throw error;
   }
 
   logFrontendEvent('ai_request_completed', { correlationId, status: response.status });
@@ -233,7 +286,12 @@ export async function invokeFunction(name, payload = {}) {
   if (!response.ok) {
     const message = data?.error || data?.message || `No se pudo ejecutar ${name}.`;
     logFrontendEvent('function_request_failed', { correlationId, functionName: name, status: response.status, message }, 'error');
-    throw new Error(`${message} (correlationId: ${correlationId})`);
+    const error = new Error(`${message} (correlationId: ${correlationId})`);
+    error.status = response.status;
+    error.code = data?.code;
+    error.type = data?.type;
+    error.payload = data;
+    throw error;
   }
   return { data };
 }

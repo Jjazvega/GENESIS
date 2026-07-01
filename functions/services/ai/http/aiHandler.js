@@ -17,6 +17,15 @@ function getCorrelationId(req) {
   if (!candidate) return createCorrelationId('ai');
   return candidate.replace(/[^a-zA-Z0-9._:-]/g, '_').slice(0, MAX_CORRELATION_ID_LENGTH) || createCorrelationId('ai');
 }
+function classifyAiHttpError(error, status) {
+  if (error?.code && error?.type) return { code: error.code, type: error.type };
+  if (status === 403) return { code: 'AI_PERMISSION_DENIED', type: 'permission' };
+  if (status === 401) return { code: 'AUTH_REQUIRED', type: 'auth' };
+  if (status === 429) return { code: 'AI_QUOTA_EXCEEDED', type: 'quota' };
+  if (status >= 400 && status < 500) return { code: 'AI_BAD_REQUEST', type: 'validation' };
+  return { code: 'AI_INTERNAL_ERROR', type: 'server' };
+}
+
 function getPrompt(body = {}) {
   const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
   if (!prompt) { const error = new Error('El campo prompt es obligatorio.'); error.status = 400; throw error; }
@@ -43,7 +52,7 @@ async function aiHandler(req, res) {
 
   if (req.method === 'OPTIONS') {
     try { enforceAllowedOrigin(req); res.status(204).send(''); }
-    catch (error) { const status = Number(error.status) || 403; structuredLog('WARNING', 'ai_cors_preflight_rejected', { correlationId, origin: req.get('origin') || 'none', status }); res.status(status).json({ error: error.message || 'CORS no permitido.', correlationId, release: RELEASE_METADATA }); }
+    catch (error) { const status = Number(error.status) || 403; structuredLog('WARNING', 'ai_cors_preflight_rejected', { correlationId, origin: req.get('origin') || 'none', status }); res.status(status).json({ error: error.message || 'CORS no permitido.', correlationId, release: RELEASE_METADATA, code: 'CORS_FORBIDDEN', type: 'cors' }); }
     return;
   }
   if (req.method !== 'POST') { structuredLog('WARNING', 'ai_request_rejected', { correlationId, method: req.method, status: 405 }); res.status(405).json({ error: 'Método no permitido. Usa POST.', correlationId, release: RELEASE_METADATA }); return; }
@@ -75,7 +84,8 @@ async function aiHandler(req, res) {
     try { await writeAiAuditLog({ eventName: 'ai_request_failed', status, user, authorization, correlationId, provider: providerName || null, model: modelName || null, requestMetadata: { companyId: req.body?.companyId, requestedDocumentCount: authorization?.documents?.length || 0, promptLength: typeof req.body?.prompt === 'string' ? req.body.prompt.length : 0, estimatedTokens: reservation?.estimatedTokens, estimatedCostUsd: reservation?.estimatedCostUsd }, errorMessage: error.message || 'No se pudo completar la consulta de IA.' }); }
     catch (auditError) { structuredLog('ERROR', 'ai_audit_log_failed', { correlationId, status: Number(auditError.status) || 500, message: auditError.message || 'No se pudo registrar auditoría IA.' }); }
     structuredLog(status >= 500 ? 'ERROR' : 'WARNING', 'ai_request_failed', { correlationId, status, latencyMs: Date.now() - startedAt, message: error.message || 'No se pudo completar la consulta de IA.' });
-    res.status(status).json({ error: error.message || 'No se pudo completar la consulta de IA.', correlationId, ...(authorization?.companyId ? { companyId: authorization.companyId } : {}), release: RELEASE_METADATA });
+    const errorContract = classifyAiHttpError(error, status);
+    res.status(status).json({ error: error.message || 'No se pudo completar la consulta de IA.', correlationId, ...(authorization?.companyId ? { companyId: authorization.companyId } : {}), release: RELEASE_METADATA, ...errorContract });
   }
 }
-module.exports = { aiHandler, getCorrelationId, getPrompt, authorizeAiRequest, getAllowedOrigins, enforceAllowedOrigin, getAiLimitConfig, estimateTokenCount, getUsageTokens, calculateCostUsd };
+module.exports = { aiHandler, getCorrelationId, getPrompt, classifyAiHttpError, authorizeAiRequest, getAllowedOrigins, enforceAllowedOrigin, getAiLimitConfig, estimateTokenCount, getUsageTokens, calculateCostUsd };

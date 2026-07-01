@@ -11,6 +11,8 @@ async function verifyFirebaseUser(req) {
   if (!token) {
     const error = new Error('Autenticación requerida para usar IA.');
     error.status = 401;
+    error.code = 'AUTH_REQUIRED';
+    error.type = 'auth';
     throw error;
   }
   try {
@@ -18,6 +20,8 @@ async function verifyFirebaseUser(req) {
   } catch (_error) {
     const error = new Error('Token de Firebase inválido o expirado.');
     error.status = 401;
+    error.code = 'AUTH_INVALID';
+    error.type = 'auth';
     throw error;
   }
 }

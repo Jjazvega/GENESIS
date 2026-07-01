@@ -118,17 +118,17 @@ export default function AIAssistant() {
     const docIds = relevantDocs.map(d => d.id);
     const correlationId = createCorrelationId('ai');
     const pendingId = createPendingConversationId();
-    const pendingConvo = { id: pendingId, query: userQuery, response: null, docs: docIds };
+    const pendingConvo = { id: pendingId, query: userQuery, response: null, docs: docIds, http: { method: 'POST', path: '/api/ai', loading: true, status: 'enviando' } };
     if (isMountedRef.current) {
       setConversations(prev => [...prev, pendingConvo]);
     }
 
-    const updateConversation = (response) => {
+    const updateConversation = (response, httpPatch = {}) => {
       if (!isMountedRef.current) return;
 
       setConversations(prev => prev.map(convo => (
         convo.id === pendingId
-          ? { ...convo, response }
+          ? { ...convo, response, http: { ...(convo.http || {}), ...httpPatch } }
           : convo
       )));
     };
@@ -176,14 +176,16 @@ PREGUNTA DEL USUARIO:
 ${userQuery}
 
 Responde de forma profesional, concisa y con datos específicos. Usa formato markdown para mejor legibilidad.`;
-      const aiResponse = await askLLM({
+      const aiHttpRequest = {
         companyId: activeCompany.id,
         prompt: requestPrompt,
         documentIds: docIds,
         correlationId,
-      });
+      };
+      updateConversation(null, { loading: true, status: 'POST /api/ai en curso', request: { companyId: aiHttpRequest.companyId, documentIds: aiHttpRequest.documentIds, correlationId } });
+      const aiResponse = await askLLM(aiHttpRequest);
       const response = normalizeAIResponse(aiResponse);
-      updateConversation(response);
+      updateConversation(response, { loading: false, status: 'HTTP 200', response: { tokens: aiResponse?.tokens, model: aiResponse?.model, costUsd: aiResponse?.costUsd, correlationId: aiResponse?.correlationId || correlationId } });
 
       await saveConversation({
         response,
@@ -197,14 +199,10 @@ Responde de forma profesional, concisa y con datos específicos. Usa formato mar
         },
       });
 
-      await logAction({
-        companyId: activeCompany.id, userEmail: user?.email, userName: user?.fullName,
-        action: 'ai_query', entityType: 'AIConversation', details: `Consulta IA completada (longitud: ${userQuery.length}, documentos: ${docIds.length})`, correlationId: aiResponse?.correlationId || correlationId
-      });
     } catch (error) {
       const errorMessage = getErrorMessage(error, 'Verifica la configuración del backend seguro y vuelve a intentar.');
       const response = `No se pudo completar la consulta de IA. ${errorMessage}`;
-      updateConversation(response);
+      updateConversation(response, { loading: false, status: `HTTP ${error?.status || 'error'}`, error: { message: errorMessage, code: error?.code, type: error?.type } });
 
       await saveConversation({ response, status: 'error', errorMessage }).catch((persistenceError) => {
         console.error('Error persisting failed AI conversation:', persistenceError);
@@ -278,6 +276,14 @@ Responde de forma profesional, concisa y con datos específicos. Usa formato mar
                       <Brain className="w-4 h-4 text-primary" />
                       <span className="text-xs font-semibold text-primary">GEMAILLA AI</span>
                     </div>
+                    {c.http && (
+                      <div className="mb-3 rounded-md border border-border bg-muted/30 p-2 text-[11px] text-muted-foreground">
+                        <div><strong>HTTP:</strong> {c.http.method} {c.http.path} · {c.http.status}</div>
+                        {c.http.request && <div><strong>Petición:</strong> companyId={c.http.request.companyId}, documentos={c.http.request.documentIds?.length || 0}, correlationId={c.http.request.correlationId}</div>}
+                        {c.http.response && <div><strong>Respuesta:</strong> modelo={c.http.response.model || 'N/A'}, tokens={c.http.response.tokens ?? 'N/A'}, costoUSD={c.http.response.costUsd ?? 'N/A'}</div>}
+                        {c.http.error && <div><strong>Error:</strong> {c.http.error.type || 'unknown'} / {c.http.error.code || 'unknown'} · {c.http.error.message}</div>}
+                      </div>
+                    )}
                     <div className="prose prose-sm prose-invert max-w-none text-sm text-foreground">
                       <ReactMarkdown>{c.response}</ReactMarkdown>
                     </div>
@@ -290,8 +296,9 @@ Responde de forma profesional, concisa y con datos específicos. Usa formato mar
                 </div>
               ) : (
                 <div className="flex justify-start mb-4">
-                  <div className="p-4 rounded-xl bg-card border border-border">
-                    <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                  <div className="p-4 rounded-xl bg-card border border-border text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2"><Loader2 className="w-5 h-5 animate-spin text-primary" /> {c.http?.status || 'Cargando IA'}</div>
+                    {c.http?.request && <div className="mt-2 text-xs">POST /api/ai · correlationId={c.http.request.correlationId}</div>}
                   </div>
                 </div>
               )}
