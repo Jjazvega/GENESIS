@@ -6,6 +6,8 @@ const firebaseClientSource = await readFile(new URL('../../src/api/firebaseClien
 const aiClientSource = await readFile(new URL('../../src/api/aiClient.js', import.meta.url), 'utf8');
 const repoClientSource = await readFile(new URL('../../src/api/repoClient.js', import.meta.url), 'utf8');
 const authClientSource = await readFile(new URL('../../src/api/authClient.js', import.meta.url), 'utf8');
+const entityClientSource = await readFile(new URL('../../src/api/entityClient.js', import.meta.url), 'utf8');
+const agentClientSource = await readFile(new URL('../../src/api/agentClient.js', import.meta.url), 'utf8');
 
 // Helper: strip single-line comment lines before checking for declarations
 function stripComments(source) {
@@ -71,17 +73,16 @@ describe('aiClient: aislamiento de base de datos', () => {
 });
 
 describe('repoClient: exposición del facade de dominio', () => {
-  it('importa operaciones AI desde aiClient (no las reimplementa)', () => {
+  it('ensambla clientes de dominio sin importar Firebase ni Firestore', () => {
     assert.match(repoClientSource, /from '@\/api\/aiClient'/);
-    assert.match(repoClientSource, /invokeLLM/);
-    assert.match(repoClientSource, /invokeFunction/);
-  });
-
-  it('importa operaciones de auth desde authClient (no las reimplementa)', () => {
     assert.match(repoClientSource, /from '@\/api\/authClient'/);
-    assert.match(repoClientSource, /getCurrentUser/);
-    assert.match(repoClientSource, /me,/);
-    assert.match(repoClientSource, /logout,/);
+    assert.match(repoClientSource, /from '@\/api\/entityClient'/);
+    assert.match(repoClientSource, /from '@\/api\/agentClient'/);
+    assert.doesNotMatch(repoClientSource, /from ['"]@\/firebase['"]/);
+    assert.doesNotMatch(repoClientSource, /from ['"]firebase\//);
+    assert.doesNotMatch(repoClientSource, /collection\(db/);
+    assert.doesNotMatch(repoClientSource, /doc\(db/);
+    assert.doesNotMatch(repoClientSource, /runTransaction\(/);
   });
 
   it('exporta el facade firebase como default y named export', () => {
@@ -102,5 +103,22 @@ describe('authClient: operaciones de autenticación', () => {
     assert.match(authClientSource, /from '@\/firebase'/);
     assert.match(authClientSource, /\bauth\b/);
     assert.match(authClientSource, /\bdb\b/);
+  });
+});
+
+
+describe('entityClient y agentClient: privilegios separados', () => {
+  it('entityClient contiene repositorios sin acoplarse a IA HTTP', () => {
+    assert.match(entityClientSource, /createRepository/);
+    assert.match(entityClientSource, /createCompanyWithInitialOwner/);
+    assert.doesNotMatch(entityClientSource, /invokeLLM/);
+    assert.doesNotMatch(entityClientSource, /invokeFunction/);
+  });
+
+  it('agentClient contiene conversaciones IA sin repositorios genéricos ni functions', () => {
+    assert.match(agentClientSource, /aiConversations/);
+    assert.match(agentClientSource, /invokeLLM/);
+    assert.doesNotMatch(agentClientSource, /createRepository/);
+    assert.doesNotMatch(agentClientSource, /invokeFunction/);
   });
 });
