@@ -20,14 +20,19 @@ describe('aiClient: endpoint safety', () => {
     assert.match(aiClientSource, /const endpoint = getSafeFunctionsEndpoint\(\);/);
     assert.match(aiClientSource, /const defaultEndpoint = '\/api\/ai';/);
     assert.match(aiClientSource, /getSafeInternalEndpoint\(defaultEndpoint, '\/api\/ai', 'ia'\)/);
-    assert.match(aiClientSource, /const safeFunctionName = encodeURIComponent\(String\(name \|\| ''\)\.trim\(\)\);/);
+    assert.match(aiClientSource, /const safeFunctionName = encodeURIComponent\(parsed\.data\.name\);/);
     assert.match(aiClientSource, /fetch\(`.*safeFunctionName.*`/);
   });
 
   it('valida inputs con Zod antes de invocar IA', () => {
     assert.match(aiClientSource, /InvokeLLMSchema/);
     assert.match(aiClientSource, /z\.object/);
-    assert.match(aiClientSource, /companyId.*z\.string/);
+    assert.match(aiClientSource, /CompanyIdSchema/);
     assert.match(aiClientSource, /safeParse/);
+    assert.match(aiClientSource, /MAX_PROMPT_LENGTH = 12000/);
+    assert.match(aiClientSource, /MAX_REQUESTED_DOCUMENTS = 25/);
+    assert.match(aiClientSource, /CompanyIdSchema/);
+    assert.match(aiClientSource, /DocumentIdArraySchema/);
+    assert.match(aiClientSource, /shapeInvokeLlmPayload/);
   });
 });

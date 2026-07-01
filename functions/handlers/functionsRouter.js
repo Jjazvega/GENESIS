@@ -1,7 +1,10 @@
 const { syncCompanyClaimsHandler } = require('./syncCompanyClaimsHandler');
+const { createAiConversationHandler, appendAiConversationMessageHandler } = require('./aiConversationHandlers');
 
 const FUNCTION_HANDLERS = new Map([
   ['syncCompanyClaims', syncCompanyClaimsHandler],
+  ['createAiConversation', createAiConversationHandler],
+  ['appendAiConversationMessage', appendAiConversationMessageHandler],
 ]);
 
 function getFunctionNameFromRequest(req) {

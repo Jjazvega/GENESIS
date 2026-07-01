@@ -7,6 +7,7 @@ admin.initializeApp();
 const openAiApiKey = defineSecret('OPENAI_API_KEY');
 const aiExports = require('./handlers/aiHandler');
 const { syncCompanyClaimsHandler, getRoleForClaims } = require('./handlers/syncCompanyClaimsHandler');
+const aiConversationExports = require('./handlers/aiConversationHandlers');
 const { functionsRouterHandler } = require('./handlers/functionsRouter');
 
 exports.ai = onRequest({ cors: false, secrets: [openAiApiKey] }, aiExports.aiHandler);
@@ -15,6 +16,7 @@ exports.functionsRouter = onRequest({ cors: false }, functionsRouterHandler);
 
 exports._test = {
   ...aiExports,
+  ...aiConversationExports,
   syncCompanyClaimsHandler,
   functionsRouterHandler,
   getRoleForClaims,

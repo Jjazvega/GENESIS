@@ -26,18 +26,18 @@ describe('clientes de dominio: controles de seguridad de empresa y conversacione
     assert.match(entityClientSource, /userUid,/);
   });
 
-  it('agents.addMessage exige conversación existente, ownerUid propio y companyId antes de invocar IA', () => {
-    assert.match(agentClientSource, /if \(!snap\.exists\(\)\) throw new Error\('Conversación no encontrada o sin acceso\.'\);/);
-    assert.match(agentClientSource, /if \(!currentUid\) throw new Error\('Debes iniciar sesión para enviar mensajes\.'\);/);
-    assert.match(agentClientSource, /current\.ownerUid && current\.ownerUid !== currentUid/);
-    assert.match(agentClientSource, /No puedes enviar mensajes en conversaciones de otro usuario/);
-    assert.match(agentClientSource, /if \(!current\.companyId\) throw new Error\('La conversación no tiene companyId válido\.'\);/);
+  it('agents.addMessage delega la validación y persistencia de IA al backend seguro', () => {
+    assert.match(repoClientSource, /companyId es obligatorio para enviar mensajes de IA mediante el backend seguro/);
+    assert.match(repoClientSource, /invokeFunction\('appendAiConversationMessage'/);
+    assert.doesNotMatch(repoClientSource, /getDoc\(refDoc\)/);
+    assert.doesNotMatch(repoClientSource, /mutations\.update\(refDoc,\s*\{\s*messages/);
   });
 
-  it('createConversation guarda companyId obligatorio en aiConversations', () => {
-    assert.match(agentClientSource, /companyId es obligatorio para crear conversaciones de IA/);
-    assert.match(agentClientSource, /companyId: safeCompanyId/);
-    assert.match(agentClientSource, /collection\(db, 'aiConversations'\)/);
+  it('createConversation enruta companyId obligatorio al backend seguro', () => {
+    assert.match(repoClientSource, /companyId es obligatorio para crear conversaciones de IA/);
+    assert.match(repoClientSource, /invokeFunction\('createAiConversation'/);
+    assert.match(repoClientSource, /companyId: safeCompanyId/);
+    assert.doesNotMatch(repoClientSource, /collection\(db, 'aiConversations'\)/);
   });
 });
 
