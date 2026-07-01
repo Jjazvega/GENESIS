@@ -284,6 +284,27 @@ describe('endpoint IA', () => {
 
     assert.equal(res.statusCode, 403);
     assert.match(res.payload.error, /CORS no permitido/);
+    assert.equal(res.payload.code, 'CORS_ORIGIN_DENIED');
+  });
+
+  it('responde 204 a preflight OPTIONS autorizado sin exigir Bearer token', async () => {
+    process.env.ALLOWED_ORIGINS = 'https://gemailla.com';
+    const handler = await loadAiEndpoint({
+      store: seedBase(),
+      verifyIdToken: async () => {
+        throw new Error('Firebase Auth no debe ejecutarse para OPTIONS');
+      },
+      fetchImpl: async () => {
+        throw new Error('OpenAI no debe llamarse para OPTIONS');
+      },
+    });
+    const res = createRes();
+
+    await handler(createReq({ method: 'OPTIONS', token: null, origin: 'https://gemailla.com' }), res);
+
+    assert.equal(res.statusCode, 204);
+    assert.equal(res.payload, '');
+    assert.equal(res.headers['Access-Control-Allow-Origin'], 'https://gemailla.com');
   });
 
   it('responde con Access-Control-Allow-Origin dinámico cuando el origen está autorizado', async () => {
@@ -312,6 +333,7 @@ describe('endpoint IA', () => {
 
     expect(res.statusCode).toBe(403);
     expect(res.payload.error).toMatch(/CORS no permitido/);
+    expect(res.payload.code).toBe('CORS_ORIGIN_DENIED');
     expect(res.headers).not.toHaveProperty('Access-Control-Allow-Origin');
     expect(res.headers.Vary).toBe('Origin');
   });
@@ -362,6 +384,7 @@ describe('endpoint IA', () => {
 
     assert.equal(res.statusCode, 403);
     assert.match(res.payload.error, /Empresa no válida/);
+    assert.equal(res.payload.code, 'COMPANY_ACCESS_DENIED');
   });
 
   it('responde 403 con membresía inválida', async () => {
@@ -369,6 +392,7 @@ describe('endpoint IA', () => {
 
     assert.equal(res.statusCode, 403);
     assert.match(res.payload.error, /membresía activa/);
+    assert.equal(res.payload.code, 'MEMBERSHIP_INACTIVE');
   });
 
   it('responde 403 con rol insuficiente', async () => {
@@ -376,6 +400,7 @@ describe('endpoint IA', () => {
 
     assert.equal(res.statusCode, 403);
     assert.match(res.payload.error, /rol no permite/);
+    assert.equal(res.payload.code, 'COMPANY_ACCESS_DENIED');
   });
 
   it('responde 403 al solicitar un documento de otro tenant', async () => {
@@ -611,6 +636,7 @@ describe('endpoint IA', () => {
 
     assert.equal(res.statusCode, 429);
     assert.match(res.payload.error, /Límite de frecuencia/);
+    assert.equal(res.payload.code, 'AI_RATE_LIMIT_EXCEEDED');
     assert.equal(openAiCalls, 0);
 
 
@@ -636,6 +662,7 @@ describe('endpoint IA', () => {
 
     assert.equal(res.statusCode, 429);
     assert.match(res.payload.error, /Cuota diaria de tokens/);
+    assert.equal(res.payload.code, 'AI_DAILY_TOKEN_QUOTA_EXCEEDED');
     assert.equal(openAiCalls, 0);
   });
 
@@ -653,6 +680,7 @@ describe('endpoint IA', () => {
 
     assert.equal(res.statusCode, 429);
     assert.match(res.payload.error, /Presupuesto diario/);
+    assert.equal(res.payload.code, 'AI_DAILY_BUDGET_EXCEEDED');
     assert.equal(openAiCalls, 0);
   });
 });

@@ -28,14 +28,14 @@ async function enforceAiLimits({ user, authorization, prompt, correlationId, now
     const nextRequestCount = windowExpired ? 1 : requestCount + 1;
     if (!windowExpired && requestCount >= config.rateLimitMaxRequests) {
       structuredLog('WARNING', 'ai_rate_limit_exceeded', { correlationId, firebaseUid: user.uid || 'unknown', companyId: authorization.companyId, requestCount, rateLimitMaxRequests: config.rateLimitMaxRequests, rateLimitWindowMs: config.rateLimitWindowMs });
-      fail(429, 'Límite de frecuencia de IA excedido. Intenta de nuevo más tarde.');
+      fail(429, 'Límite de frecuencia de IA excedido. Intenta de nuevo más tarde.', 'AI_RATE_LIMIT_EXCEEDED');
     }
     const usageSnap = await transaction.get(usageRef);
     const usageData = usageSnap.exists ? (usageSnap.data() || {}) : {};
     const usedTokens = toCounterNumber(usageData.reservedTokens) + toCounterNumber(usageData.tokensUsed);
     const usedBudgetUsd = toCounterNumber(usageData.reservedBudgetUsd) + toCounterNumber(usageData.budgetUsedUsd);
-    if (usedTokens + estimatedTokens > config.dailyTokenLimit) fail(429, 'Cuota diaria de tokens IA excedida para esta empresa.');
-    if (usedBudgetUsd + estimatedCostUsd > config.dailyBudgetUsd) fail(429, 'Presupuesto diario de IA excedido para esta empresa.');
+    if (usedTokens + estimatedTokens > config.dailyTokenLimit) fail(429, 'Cuota diaria de tokens IA excedida para esta empresa.', 'AI_DAILY_TOKEN_QUOTA_EXCEEDED');
+    if (usedBudgetUsd + estimatedCostUsd > config.dailyBudgetUsd) fail(429, 'Presupuesto diario de IA excedido para esta empresa.', 'AI_DAILY_BUDGET_EXCEEDED');
     await enforceAiRiskControls({ transaction, db, user, authorization, prompt, usageRef, usageData, estimatedTokens, estimatedCostUsd, correlationId, now });
     transaction.set(rateRef, { companyId: authorization.companyId, userUid: user.uid || 'unknown', windowStartedAtMs: windowExpired ? nowMs : windowStartedAtMs, requestCount: nextRequestCount, updatedAtMs: nowMs }, { merge: true });
     transaction.set(usageRef, { companyId: authorization.companyId, dateKey: getUtcDateKey(now), reservedTokens: Math.max(0, toCounterNumber(usageData.reservedTokens) + estimatedTokens), reservedBudgetUsd: Number(Math.max(0, toCounterNumber(usageData.reservedBudgetUsd) + estimatedCostUsd).toFixed(8)), requestCount: toCounterNumber(usageData.requestCount) + 1, updatedAtMs: nowMs }, { merge: true });
