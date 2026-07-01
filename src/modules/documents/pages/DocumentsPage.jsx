@@ -18,6 +18,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { uploadDocumentFlow } from '@/features/documents/services/uploadDocumentFlow';
 import { analyzeDocumentFlow } from '@/features/documents/services/analyzeDocumentFlow';
 import { useDebouncedValue, useFilteredDocuments } from '@/features/documents/hooks/useFilteredDocuments';
+import { DOCUMENT_FILE_ACCEPT, validateDocumentFileMetadata, validateDocumentStoragePath } from '@/security/documentFileValidation';
 
 const statusColors = {
   [DOCUMENT_STATUSES.UPLOADED]: 'bg-slate-500/10 text-slate-300 border-slate-500/20',
@@ -44,7 +45,14 @@ const statusLabels = {
 const analyzableStatuses = new Set([
   DOCUMENT_STATUSES.UPLOADED,
   DOCUMENT_STATUSES.PENDING,
+  DOCUMENT_STATUSES.ERROR,
   DOCUMENT_STATUSES.AI_DISABLED,
+]);
+
+const archiveBlockedStatuses = new Set([
+  DOCUMENT_STATUSES.UPLOADING,
+  DOCUMENT_STATUSES.PROCESSING,
+  DOCUMENT_STATUSES.ARCHIVED,
 ]);
 
 const docTypeLabels = {
@@ -90,6 +98,18 @@ export default function Documents() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    try {
+      validateDocumentFileMetadata(file);
+    } catch (error) {
+      toast({
+        title: 'Archivo no válido',
+        description: getErrorMessage(error, 'Solo se aceptan documentos PDF o XML válidos de hasta 15MB.'),
+        variant: 'destructive',
+      });
+      e.target.value = '';
+      return;
+    }
+
     setUploading(true);
 
     try {
@@ -114,10 +134,12 @@ export default function Documents() {
   };
 
   const handleOpenDocument = async (doc) => {
-    if (!doc?.storagePath) {
+    try {
+      validateDocumentStoragePath(doc?.storagePath, { companyId: activeCompany?.id, documentId: doc?.id });
+    } catch (error) {
       toast({
-        title: 'Documento sin archivo',
-        description: 'No se encontró la ruta segura del archivo en Storage.',
+        title: 'Documento sin archivo válido',
+        description: getErrorMessage(error, 'No se encontró una ruta segura del archivo en Storage.'),
         variant: 'destructive',
       });
       return;
@@ -136,6 +158,17 @@ export default function Documents() {
   };
 
   const handleAnalyze = async (doc) => {
+    try {
+      validateDocumentStoragePath(doc?.storagePath, { companyId: activeCompany?.id, documentId: doc?.id });
+    } catch (error) {
+      toast({
+        title: 'No se puede analizar',
+        description: getErrorMessage(error, 'El documento no tiene una ruta segura de Storage.'),
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setAnalyzing(doc.id);
 
     try {
@@ -176,7 +209,7 @@ export default function Documents() {
         actions={
           <div className="flex items-center gap-3">
             <div className="relative">
-              <input type="file" id="file-upload" className="hidden" accept=".pdf,.xml" onChange={handleUpload} />
+              <input type="file" id="file-upload" className="hidden" accept={DOCUMENT_FILE_ACCEPT} onChange={handleUpload} />
               <Button
                 onClick={() => document.getElementById('file-upload').click()}
                 aria-label="Subir documento"
@@ -246,7 +279,7 @@ export default function Documents() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  {analyzableStatuses.has(doc.status) && (
+                  {analyzableStatuses.has(doc.status) && doc.storagePath && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -261,8 +294,15 @@ export default function Documents() {
                   <Button size="sm" variant="outline" onClick={() => setSelectedDoc(doc)} aria-label={`Ver documento ${doc.title}`} className="border-border">
                     <Eye className="w-4 h-4" />
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => deleteMutation.mutate(doc.id)} aria-label={`Archivar documento ${doc.title}`} className="border-border text-destructive hover:bg-destructive/10">
-                    <Trash2 className="w-4 h-4" />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => deleteMutation.mutate(doc.id)}
+                    aria-label={`Archivar documento ${doc.title}`}
+                    disabled={archiveBlockedStatuses.has(doc.status) || deleteMutation.isPending}
+                    className="border-border text-destructive hover:bg-destructive/10"
+                  >
+                    {deleteMutation.isPending && deleteMutation.variables === doc.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                   </Button>
                 </div>
               </motion.div>
