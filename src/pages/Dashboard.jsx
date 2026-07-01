@@ -3,21 +3,17 @@ import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
   Bell,
-  Building2,
   CalendarDays,
   CheckCircle2,
   CircleDollarSign,
   Download,
-  FileText,
   HelpCircle,
   Menu,
   Search,
   ShieldAlert,
   Target,
-  TrendingUp,
   TriangleAlert,
   UsersRound,
-  WalletCards,
   Zap,
 } from 'lucide-react';
 import LoadingState from '@/components/shared/LoadingState';

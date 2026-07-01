@@ -5,6 +5,7 @@ import { isAiDisabledResponse } from '@/api/aiClient';
 import { logAction } from '@/lib/auditLogger';
 import { DOCUMENT_STATUSES } from '@/features/documents/constants/documentStatuses';
 import { ensureCorrelationId, getReleaseMetadata, logFrontendEvent } from '@/lib/observability';
+import { validateDocumentStoragePath } from '@/security/documentFileValidation';
 
 import { askLLM } from '@/modules/ai/aiService';
 
@@ -31,11 +32,12 @@ function pickAiResultFields(result = {}) {
 function validateDocumentReadyForAi({ doc, company }) {
   if (!company?.id) throw new Error('Necesitas una empresa activa para analizar documentos.');
   if (doc.companyId !== company.id) throw new Error('El documento no pertenece a la empresa activa.');
-  if (!doc.storagePath || !String(doc.storagePath).startsWith(`companies/${company.id}/documents/${doc.id}/`)) {
-    throw new Error('El documento no tiene una ruta interna válida para esta empresa.');
-  }
+  validateDocumentStoragePath(doc.storagePath, { companyId: company.id, documentId: doc.id });
   if (!['pdf', 'xml'].includes(String(doc.fileType || '').toLowerCase())) {
     throw new Error('Solo se pueden analizar documentos PDF o XML validados.');
+  }
+  if ([DOCUMENT_STATUSES.UPLOADING, DOCUMENT_STATUSES.PROCESSING, DOCUMENT_STATUSES.ARCHIVED].includes(doc.status)) {
+    throw new Error('El documento no está en un estado válido para iniciar análisis.');
   }
 }
 
@@ -111,6 +113,7 @@ export async function analyzeDocumentFlow({ doc, company, user, correlationId: p
     await firebase.entities.Document.update(doc.id, {
       ...pickAiResultFields(result),
       status: DOCUMENT_STATUSES.ANALYZED,
+      analyzedAt: new Date().toISOString(),
       aiDisabled: false,
       errorMessage: null,
       correlationId,

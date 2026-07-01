@@ -5,18 +5,57 @@ import { ensureCorrelationId, getReleaseMetadata, logFrontendEvent, persistObser
 
 // ── Zod input schemas (zero-trust validation) ────────────────────────────────
 
+const MAX_PROMPT_LENGTH = 12000;
+const MAX_REQUESTED_DOCUMENTS = 25;
+const MAX_CORRELATION_ID_LENGTH = 160;
+const COMPANY_ID_PATTERN = /^[A-Za-z0-9_-]{1,160}$/;
+
+const CompanyIdSchema = z.string()
+  .trim()
+  .min(1, 'companyId es obligatorio para usar IA.')
+  .max(160, 'companyId inválido.')
+  .regex(COMPANY_ID_PATTERN, 'companyId inválido.');
+
+const CorrelationIdSchema = z.string()
+  .trim()
+  .min(1, 'correlationId inválido.')
+  .max(MAX_CORRELATION_ID_LENGTH, `correlationId no puede exceder ${MAX_CORRELATION_ID_LENGTH} caracteres.`)
+  .optional();
+
+const DocumentIdArraySchema = z.array(
+  z.string().trim().min(1, 'Todos los documentIds deben ser válidos.').max(160, 'documentId inválido.'),
+)
+  .max(MAX_REQUESTED_DOCUMENTS, `No se permiten más de ${MAX_REQUESTED_DOCUMENTS} documentIds por consulta.`)
+  .transform((items) => [...new Set(items)]);
+
+const StoragePathArraySchema = z.array(
+  z.string().trim().min(1, 'Todas las rutas de documento deben ser válidas.').max(500, 'Ruta de documento inválida.'),
+)
+  .max(MAX_REQUESTED_DOCUMENTS, `No se permiten más de ${MAX_REQUESTED_DOCUMENTS} rutas de documento por consulta.`)
+  .transform((items) => [...new Set(items)]);
+
 export const InvokeLLMSchema = z.object({
-  companyId: z.string().trim().min(1, 'companyId es obligatorio para usar IA.'),
-  prompt: z.string().optional(),
-  documentIds: z.array(z.string()).optional(),
-  correlationId: z.string().optional(),
+  companyId: CompanyIdSchema,
+  prompt: z.string()
+    .trim()
+    .min(1, 'El prompt es obligatorio para usar IA.')
+    .max(MAX_PROMPT_LENGTH, `El prompt no puede exceder ${MAX_PROMPT_LENGTH} caracteres.`),
+  documentIds: DocumentIdArraySchema.optional(),
+  storagePaths: StoragePathArraySchema.optional(),
+  correlationId: CorrelationIdSchema,
+  response_json_schema: z.record(z.unknown()).optional(),
+  integration: z.string().trim().min(1, 'Integración inválida.').max(80, 'Integración inválida.').optional(),
   release: z.record(z.unknown()).optional(),
-});
+}).strict();
 
 export const InvokeFunctionSchema = z.object({
-  name: z.string().trim().min(1, 'Nombre de función inválido.'),
+  name: z.string()
+    .trim()
+    .min(1, 'Nombre de función inválido.')
+    .max(80, 'Nombre de función inválido.')
+    .regex(/^[A-Za-z0-9_-]+$/, 'Nombre de función inválido.'),
   payload: z.record(z.unknown()).optional(),
-});
+}).strict();
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -87,6 +126,27 @@ export function getSafeAiEndpoint() {
   return getSafeInternalEndpoint(defaultEndpoint, '/api/ai', 'ia');
 }
 
+function shapeInvokeLlmPayload(data, correlationId) {
+  return {
+    companyId: data.companyId,
+    prompt: data.prompt,
+    ...(data.documentIds?.length ? { documentIds: data.documentIds } : {}),
+    ...(data.storagePaths?.length ? { storagePaths: data.storagePaths } : {}),
+    ...(data.response_json_schema ? { response_json_schema: data.response_json_schema } : {}),
+    ...(data.integration ? { integration: data.integration } : {}),
+    correlationId,
+    release: getReleaseMetadata(),
+  };
+}
+
+function shapeInvokeFunctionPayload(payload = {}, correlationId) {
+  return {
+    ...payload,
+    correlationId,
+    release: getReleaseMetadata(),
+  };
+}
+
 // ── AI LLM call (no database mutation access) ────────────────────────────────
 
 export async function invokeLLM(params = {}) {
@@ -95,8 +155,7 @@ export async function invokeLLM(params = {}) {
     throw new Error(parsed.error.issues[0]?.message || 'Parámetros de IA inválidos.');
   }
 
-  const correlationId = ensureCorrelationId(params.correlationId, 'ai');
-  const companyId = parsed.data.companyId;
+  const correlationId = ensureCorrelationId(parsed.data.correlationId, 'ai');
   const endpoint = getSafeAiEndpoint();
   const response = await fetch(endpoint, {
     method: 'POST',
@@ -105,12 +164,7 @@ export async function invokeLLM(params = {}) {
       'X-Correlation-Id': correlationId,
       ...(await getAuthHeader()),
     },
-    body: JSON.stringify({
-      ...params,
-      companyId,
-      correlationId,
-      release: getReleaseMetadata(),
-    }),
+    body: JSON.stringify(shapeInvokeLlmPayload(parsed.data, correlationId)),
   });
 
   const raw = await response.text();
@@ -148,7 +202,7 @@ export async function invokeFunction(name, payload = {}) {
   const parsed = InvokeFunctionSchema.safeParse({ name, payload });
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message || 'Nombre de función inválido.');
 
-  const correlationId = ensureCorrelationId(payload.correlationId, name || 'fn');
+  const correlationId = ensureCorrelationId(parsed.data.payload?.correlationId, parsed.data.name || 'fn');
   const endpoint = getSafeFunctionsEndpoint();
   if (!endpoint) {
     return {
@@ -162,7 +216,7 @@ export async function invokeFunction(name, payload = {}) {
     };
   }
 
-  const safeFunctionName = encodeURIComponent(String(name || '').trim());
+  const safeFunctionName = encodeURIComponent(parsed.data.name);
   if (!safeFunctionName) throw new Error('Nombre de función inválido.');
 
   const response = await fetch(`${endpoint.replace(/\/$/, '')}/${safeFunctionName}`, {
@@ -172,11 +226,7 @@ export async function invokeFunction(name, payload = {}) {
       'X-Correlation-Id': correlationId,
       ...(await getAuthHeader()),
     },
-    body: JSON.stringify({
-      ...payload,
-      correlationId,
-      release: payload.release || getReleaseMetadata(),
-    }),
+    body: JSON.stringify(shapeInvokeFunctionPayload(parsed.data.payload, correlationId)),
   });
 
   const data = await response.json().catch(() => ({}));

@@ -22,7 +22,10 @@ La capa `api/` está segmentada en clientes independientes. Importar del cliente
 | `firebaseClient.js` | **Solo primitivas**: re-exporta `app`, `db`, `auth`, `storage` de `@/firebase`. Sin lógica de negocio. | Solo re-export |
 | `authClient.js` | Operaciones de autenticación: `getAuthHeader`, `me`, `logout`, `syncUserProfile`. | `auth` + `db` (perfil de usuario) |
 | `aiClient.js` | Llamadas HTTP a la API de IA y funciones internas. Valida inputs con **Zod**. Sin acceso a Firestore. | Solo `auth` (lectura de token) |
-| `repoClient.js` | Repositorios de entidades, agentes de conversación, facade `firebase`. Ensambla `authClient` + `aiClient`. | `auth` + `db` (escrituras de negocio) |
+| `entityClient.js` | Repositorios de entidades y creación transaccional de empresa con owner inicial. | `auth` + `db` (entidades) |
+| `agentClient.js` | Agentes de conversación IA y persistencia de mensajes. | `db` (solo `aiConversations`) + `aiClient` |
+| `connectorClient.js` | Stubs de conectores externos sin privilegios cliente. | Sin acceso Firebase |
+| `repoClient.js` | Facade `firebase` de compatibilidad. Solo ensambla clientes de dominio; no importa Firebase/Firestore. | Sin acceso directo |
 
 ### Regla de aislamiento de `aiClient.js`
 
@@ -42,6 +45,7 @@ Los inputs de `invokeLLM` y `invokeFunction` en `aiClient.js` son validados con 
 4. Las rutas relativas profundas entre capas deben evitarse cuando exista alias `@/`; los imports deben dejar clara la capa consumida.
 5. Una capa puede depender de capas más técnicas o transversales, pero no debe saltarse fachadas públicas para acceder a detalles internos.
 6. Los componentes de UI deben importar el facade `firebase` desde `@/api/repoClient`, no desde `@/api/firebaseClient`.
+7. Cada método exportado desde `src/api/` debe revisarse como API pública: validar identidad/tenant (`uid`, `companyId`) antes de efectos externos y no mezclar privilegios de otro dominio en el mismo cliente.
 
 ### Matriz permitida
 
@@ -59,7 +63,7 @@ Los inputs de `invokeLLM` y `invokeFunction` en `aiClient.js` son validados con 
 Antes de abrir o aprobar un cambio:
 
 1. Identificar la capa tocada y confirmar que el archivo cumple la responsabilidad de la tabla.
-2. Verificar que cualquier acceso a Firebase pasa por el cliente de API correcto (`authClient`, `aiClient` o `repoClient`).
+2. Verificar que cualquier acceso a Firebase pasa por el cliente de API correcto (`authClient`, `aiClient`, `entityClient`, `agentClient` o `repoClient` solo como facade composicional).
 3. Confirmar que una feature nueva tiene nombre de caso de uso y no queda escondida en `pages/` o `lib/`.
 4. Confirmar que un módulo expone solo su boundary público y no obliga a otros dominios a importar archivos internos.
 5. Ejecutar `npm run validate:architecture -- --local-only` para cubrir las reglas automatizadas disponibles.
@@ -72,7 +76,9 @@ Antes de abrir o aprobar un cambio:
 - ¿Es un caso de uso con reglas de negocio? Usar `features/<dominio>/`.
 - ¿Es una llamada HTTP a backend o Firebase Auth? Usar `api/aiClient.js`.
 - ¿Es una operación de autenticación o perfil de usuario? Usar `api/authClient.js`.
-- ¿Es acceso a repositorios de entidades o agentes de IA? Usar `api/repoClient.js`.
+- ¿Es acceso a repositorios de entidades? Usar `api/entityClient.js` y exponerlo por `api/repoClient.js` solo si la UI necesita compatibilidad con el facade.
+- ¿Es persistencia de conversaciones o agentes de IA? Usar `api/agentClient.js`.
+- ¿Es composición del facade legado `firebase`? Usar `api/repoClient.js` sin importar Firebase directamente.
 - ¿Es integración técnica con Firebase? Usar `infrastructure/firebase/`.
 - ¿Es un helper transversal sin negocio? Usar `lib/`.
 

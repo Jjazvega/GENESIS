@@ -17,7 +17,6 @@ import {
   UsersRound,
   Settings,
   ShieldCheck,
-  FolderOpen,
   ChartNoAxesCombined,
 } from 'lucide-react';
 import {

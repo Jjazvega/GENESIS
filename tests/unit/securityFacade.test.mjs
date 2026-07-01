@@ -4,6 +4,8 @@ import { describe, it } from 'node:test';
 
 const authClientSource = await readFile(new URL('../../src/api/authClient.js', import.meta.url), 'utf8');
 const repoClientSource = await readFile(new URL('../../src/api/repoClient.js', import.meta.url), 'utf8');
+const entityClientSource = await readFile(new URL('../../src/api/entityClient.js', import.meta.url), 'utf8');
+const agentClientSource = await readFile(new URL('../../src/api/agentClient.js', import.meta.url), 'utf8');
 const architectureSource = await readFile(new URL('../../scripts/validate-architecture.js', import.meta.url), 'utf8');
 
 describe('authClient: controles de seguridad de perfil', () => {
@@ -15,27 +17,27 @@ describe('authClient: controles de seguridad de perfil', () => {
   });
 });
 
-describe('repoClient: controles de seguridad de empresa y conversaciones', () => {
+describe('clientes de dominio: controles de seguridad de empresa y conversaciones', () => {
   it('createCompanyWithInitialOwner no permite companyData.ownerUid ni membershipData.userUid ajenos', () => {
-    assert.match(repoClientSource, /const requestedOwnerUid = membershipData\.userUid \|\| companyData\.ownerUid \|\| currentUid;/);
-    assert.match(repoClientSource, /requestedOwnerUid && currentUid && requestedOwnerUid !== currentUid/);
-    assert.match(repoClientSource, /No puedes crear empresas ni membresías iniciales para otro usuario/);
-    assert.match(repoClientSource, /ownerUid: userUid/);
-    assert.match(repoClientSource, /userUid,/);
+    assert.match(entityClientSource, /const requestedOwnerUid = membershipData\.userUid \|\| companyData\.ownerUid \|\| currentUid;/);
+    assert.match(entityClientSource, /requestedOwnerUid && currentUid && requestedOwnerUid !== currentUid/);
+    assert.match(entityClientSource, /No puedes crear empresas ni membresías iniciales para otro usuario/);
+    assert.match(entityClientSource, /ownerUid: userUid/);
+    assert.match(entityClientSource, /userUid,/);
   });
 
-  it('agents.addMessage exige conversación existente, ownerUid propio y companyId antes de invocar IA', () => {
-    assert.match(repoClientSource, /if \(!snap\.exists\(\)\) throw new Error\('Conversación no encontrada o sin acceso\.'\);/);
-    assert.match(repoClientSource, /if \(!currentUid\) throw new Error\('Debes iniciar sesión para enviar mensajes\.'\);/);
-    assert.match(repoClientSource, /current\.ownerUid && current\.ownerUid !== currentUid/);
-    assert.match(repoClientSource, /No puedes enviar mensajes en conversaciones de otro usuario/);
-    assert.match(repoClientSource, /if \(!current\.companyId\) throw new Error\('La conversación no tiene companyId válido\.'\);/);
+  it('agents.addMessage delega la validación y persistencia de IA al backend seguro', () => {
+    assert.match(repoClientSource, /companyId es obligatorio para enviar mensajes de IA mediante el backend seguro/);
+    assert.match(repoClientSource, /invokeFunction\('appendAiConversationMessage'/);
+    assert.doesNotMatch(repoClientSource, /getDoc\(refDoc\)/);
+    assert.doesNotMatch(repoClientSource, /mutations\.update\(refDoc,\s*\{\s*messages/);
   });
 
-  it('createConversation guarda companyId obligatorio en aiConversations', () => {
+  it('createConversation enruta companyId obligatorio al backend seguro', () => {
     assert.match(repoClientSource, /companyId es obligatorio para crear conversaciones de IA/);
+    assert.match(repoClientSource, /invokeFunction\('createAiConversation'/);
     assert.match(repoClientSource, /companyId: safeCompanyId/);
-    assert.match(repoClientSource, /collection\(db, 'aiConversations'\)/);
+    assert.doesNotMatch(repoClientSource, /collection\(db, 'aiConversations'\)/);
   });
 });
 
@@ -50,5 +52,7 @@ describe('arquitectura de imports Firebase', () => {
     assert.match(architectureSource, /authClient\.js/);
     assert.match(architectureSource, /aiClient\.js/);
     assert.match(architectureSource, /repoClient\.js/);
+    assert.match(architectureSource, /entityClient\.js/);
+    assert.match(architectureSource, /agentClient\.js/);
   });
 });

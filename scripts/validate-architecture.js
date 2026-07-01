@@ -14,7 +14,9 @@ const ALLOWED_FIREBASE_IMPORT_FILES = new Set([
   'src/api/firebaseClient.js', // re-exports primitives only
   'src/api/authClient.js',     // auth + user-profile mutations
   'src/api/aiClient.js',       // AI HTTP calls (auth token read-only)
-  'src/api/repoClient.js',     // entity repositories and agents
+  'src/api/repoClient.js',     // facade composition only
+  'src/api/entityClient.js',   // entity repositories and company creation
+  'src/api/agentClient.js',    // AI conversations
 ]);
 const PUBLIC_VITE_ALLOWLIST = new Set([
   'VITE_FIREBASE_API_KEY',
@@ -29,6 +31,11 @@ const PUBLIC_VITE_ALLOWLIST = new Set([
   'VITE_DEPLOY_ENV',
 ]);
 const SENSITIVE_VITE_PATTERN = /VITE_[A-Z0-9_]*(SECRET|PRIVATE|TOKEN|PASSWORD|PASS|OPENAI|STRIPE_SECRET|SERVICE_ACCOUNT|CLIENT_SECRET|WEBHOOK_SECRET|ADMIN|CREDENTIAL)[A-Z0-9_]*/g;
+const RETIRED_FEATURE_DIRS = [
+  'src/features/crm',
+  'src/features/erp',
+  'src/features/operations',
+];
 
 function walk(dir, files = []) {
   for (const entry of readdirSync(dir)) {
@@ -70,6 +77,14 @@ function validateFirebaseImports(issues) {
     const source = readFileSync(abs, 'utf8');
     for (const match of source.matchAll(importPattern)) {
       addIssue(issues, 'firebase-imports', repoPath, `Import directo/alternativo de Firebase no permitido fuera de src/infrastructure: ${match[1] || match[2]}. Usa el facade de infraestructura/API.`);
+    }
+  }
+}
+
+function validateRetiredFeatureDirs(issues) {
+  for (const dir of RETIRED_FEATURE_DIRS) {
+    if (existsSync(resolve(ROOT, dir))) {
+      addIssue(issues, 'retired-feature-dirs', dir, 'Directorio fuera del alcance Core. El Core solo mantiene Dashboard, Empresas, Documentos, Finanzas e IA; documenta un RFC antes de reincorporarlo.');
     }
   }
 }
@@ -179,6 +194,37 @@ function validateAiClientDbIsolation(issues) {
   }
 }
 
+function validateAiProviderImports(issues) {
+  const providerImportPattern = /(?:import|export)\s+(?:[^'";]+\s+from\s+)?['"](openai|anthropic|@anthropic-ai\/sdk|@google-cloud\/vertexai|@google\/generative-ai)['"]|require\(['"](openai|anthropic|@anthropic-ai\/sdk|@google-cloud\/vertexai|@google\/generative-ai)['"]\)/g;
+  const guardedRoots = ['src/components', 'src/features', 'src/modules', 'src/pages'];
+  for (const root of guardedRoots) {
+    for (const abs of collectSourceFiles(root)) {
+      const repoPath = toRepoPath(abs);
+      const source = readFileSync(abs, 'utf8');
+      for (const match of source.matchAll(providerImportPattern)) {
+        addIssue(issues, 'ai-provider-imports', repoPath, `SDK de proveedor IA no permitido en frontend visual: ${match[1]}. Usa src/api/aiClient.js.`);
+      }
+    }
+  }
+}
+
+function validateClientAiConversationWrites(issues) {
+  const scanRoots = ['src/components', 'src/features', 'src/modules', 'src/pages'];
+  const forbiddenPatterns = [
+    /AIConversation\.create\(/,
+    /firebase\.entities\.AIConversation\.create\(/,
+  ];
+  for (const root of scanRoots) {
+    for (const abs of collectSourceFiles(root)) {
+      const repoPath = toRepoPath(abs);
+      const source = readFileSync(abs, 'utf8');
+      if (forbiddenPatterns.some((pattern) => pattern.test(source))) {
+        addIssue(issues, 'ai-client-persistence', repoPath, 'La persistencia de conversaciones IA debe delegarse al backend vía /api/functions/*, no a Firestore desde el cliente.');
+      }
+    }
+  }
+}
+
 function validateFirebaseClientPrimitivesOnly(issues) {
   const clientPath = resolve(ROOT, 'src/api/firebaseClient.js');
   if (!existsSync(clientPath)) return;
@@ -214,10 +260,13 @@ function parseArgs(argv) {
 function main() {
   const options = parseArgs(process.argv.slice(2));
   const issues = [];
+  validateRetiredFeatureDirs(issues);
   validateFirebaseImports(issues);
   validateFeatureCompanyGuards(issues);
   validateSensitiveViteVariables(issues);
   validateAiClientDbIsolation(issues);
+  validateAiProviderImports(issues);
+  validateClientAiConversationWrites(issues);
   validateFirebaseClientPrimitivesOnly(issues);
   validateFirestoreIndexes(issues, options);
 
@@ -228,7 +277,7 @@ function main() {
   }
 
   const remoteText = options.project ? ` e índices remotos del proyecto ${options.project}` : ' (índices remotos omitidos; usa --project=<id> en CI con credenciales)';
-  console.log(`✅ Arquitectura validada: imports Firebase, guards company.id, VITE sensibles, aislamiento aiClient, primitivas firebaseClient e índices Firestore${remoteText}.`);
+  console.log(`✅ Arquitectura validada: imports Firebase, frontera IA frontend, guards company.id, VITE sensibles, aislamiento aiClient, primitivas firebaseClient e índices Firestore${remoteText}.`);
 }
 
 main();
