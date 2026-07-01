@@ -24,3 +24,7 @@ npm run dev
 - Los documentos usan `storagePath`.
 - PDF/XML máximo 15 MB.
 - Borrado lógico con `status: archived`.
+
+## Seguridad y arquitectura
+
+- [Arquitectura por capas obligatoria](docs/architecture/layers.md): define responsabilidades de `pages/`, `modules/`, `features/`, `api/`, `infrastructure/` y `lib/`, junto con reglas de importación.
